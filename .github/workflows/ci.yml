@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build-test-package:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore WinLedger.sln
+
+      - name: Build
+        run: dotnet build WinLedger.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test WinLedger.sln --configuration Release --no-build
+
+      - name: Format check
+        run: dotnet format WinLedger.sln --verify-no-changes --no-restore
+
+      - name: Vulnerable package check
+        run: dotnet list WinLedger.sln package --vulnerable --include-transitive
+
+      - name: Package portable release
+        shell: pwsh
+        run: .\build\Package-Portable.ps1 -Configuration Release -Runtime win-x64 -Version "0.1.0-alpha-${{ github.run_number }}"
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: winledger-portable-win-x64
+          path: |
+            artifacts/release/*.zip
+            artifacts/release/*.json

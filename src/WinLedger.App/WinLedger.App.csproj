@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\WinLedger.Domain\WinLedger.Domain.csproj" />
+    <ProjectReference Include="..\WinLedger.Core\WinLedger.Core.csproj" />
+    <ProjectReference Include="..\WinLedger.Collectors\WinLedger.Collectors.csproj" />
+    <ProjectReference Include="..\WinLedger.Comparison\WinLedger.Comparison.csproj" />
+    <ProjectReference Include="..\WinLedger.Rollback\WinLedger.Rollback.csproj" />
+    <ProjectReference Include="..\WinLedger.Storage\WinLedger.Storage.csproj" />
+    <ProjectReference Include="..\WinLedger.Windows\WinLedger.Windows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.10" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+</Project>
