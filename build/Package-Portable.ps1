@@ -73,7 +73,7 @@ function Resolve-DotNetPath {
 $resolvedDotNetPath = Resolve-DotNetPath -RequestedPath $DotNetPath -RepositoryRoot $repoRoot
 
 if (-not $NoRestore.IsPresent) {
-    & $resolvedDotNetPath restore (Join-Path $repoRoot "WinLedger.sln")
+    & $resolvedDotNetPath restore (Join-Path $repoRoot "WinLedger.sln") "-r" $Runtime
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet restore failed."
     }
@@ -165,6 +165,17 @@ $manifest = [ordered]@{
 
 $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $outputRootPath "$packageName.json") -Encoding UTF8
 
+$sbomPath = Join-Path $outputRootPath "$packageName.sbom.json"
+& (Join-Path $repoRoot "build\Generate-Sbom.ps1") `
+    -SolutionPath (Join-Path $repoRoot "WinLedger.sln") `
+    -OutputPath $sbomPath `
+    -DotNetPath $resolvedDotNetPath `
+    -PackageRoot $outputRootPath
+if ($LASTEXITCODE -ne 0) {
+    throw "SBOM generation failed."
+}
+
 Write-Output "Package: $zipPath"
 Write-Output "Manifest: $(Join-Path $outputRootPath "$packageName.json")"
+Write-Output "SBOM: $sbomPath"
 Write-Output "SHA256: $($hash.Hash)"
