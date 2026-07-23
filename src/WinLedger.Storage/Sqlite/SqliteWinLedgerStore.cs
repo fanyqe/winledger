@@ -555,6 +555,7 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        var storedPayload = SqliteSnapshotPayloadProtector.Protect(payloadJson);
 
         await ExecuteNonQueryAsync(
             connection,
@@ -571,7 +572,7 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
             new SqliteParameter("$sessionId", sessionId.ToString()),
             new SqliteParameter("$name", name),
             new SqliteParameter("$capturedAtUtc", capturedAt.UtcDateTime.ToString("O")),
-            new SqliteParameter("$payload", payloadJson))
+            new SqliteParameter("$payload", storedPayload))
             .ConfigureAwait(false);
     }
 
@@ -589,7 +590,7 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
         var payload = (string?)await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
         return payload is null
             ? default
-            : JsonSerializer.Deserialize<TSnapshot>(payload, WinLedgerJsonSerializer.Options);
+            : DeserializeSnapshot<TSnapshot>(payload);
     }
 
     private async Task<IReadOnlyList<TSnapshot>> ListSnapshotsAsync<TSnapshot>(
@@ -614,7 +615,7 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             var payload = reader.GetString(0);
-            var snapshot = JsonSerializer.Deserialize<TSnapshot>(payload, WinLedgerJsonSerializer.Options);
+            var snapshot = DeserializeSnapshot<TSnapshot>(payload);
             if (snapshot is not null)
             {
                 snapshots.Add(snapshot);
@@ -622,6 +623,12 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
         }
 
         return snapshots;
+    }
+
+    private static TSnapshot? DeserializeSnapshot<TSnapshot>(string storedPayload)
+    {
+        var payloadJson = SqliteSnapshotPayloadProtector.UnprotectIfNeeded(storedPayload);
+        return JsonSerializer.Deserialize<TSnapshot>(payloadJson, WinLedgerJsonSerializer.Options);
     }
 
     private async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
