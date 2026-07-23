@@ -9,6 +9,7 @@
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -40,7 +41,52 @@
             </StackPanel>
         </DockPanel>
 
-        <TabControl Grid.Row="1">
+        <Border Grid.Row="1" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1.1*" />
+                    <ColumnDefinition Width="1.0*" />
+                    <ColumnDefinition Width="1.4*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Tracking session" FontWeight="SemiBold" Foreground="#374151" />
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="Registry profile" FontWeight="SemiBold" Foreground="#374151" />
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="File-system root" FontWeight="SemiBold" Foreground="#374151" />
+
+                <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding UnifiedSessionTitle, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding RegistryProfiles}" SelectedItem="{Binding SelectedRegistryProfile, Mode=TwoWay}" DisplayMemberPath="DisplayName" Height="34" Margin="0,6,12,0" />
+                <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding FileSystemRootPath, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                <Button Grid.Row="1" Grid.Column="3" Command="{Binding CaptureUnifiedBaselineCommand}" Content="Capture Baseline" Height="34" Padding="14,0" Margin="0,6,8,0" />
+                <Button Grid.Row="1" Grid.Column="4" Command="{Binding CaptureUnifiedComparisonCommand}" Content="Finish and Compare" Height="34" Padding="14,0" Margin="0,6,8,0" />
+                <Button Grid.Row="1" Grid.Column="5" Command="{Binding CancelUnifiedCaptureCommand}" Content="Cancel" Height="34" Padding="14,0" Margin="0,6,0,0" />
+
+                <DockPanel Grid.Row="2" Grid.ColumnSpan="6" Margin="0,12,0,0">
+                    <ProgressBar DockPanel.Dock="Right" Width="220" Height="12" Minimum="0" Maximum="100" Value="{Binding UnifiedCaptureProgressPercent}" Margin="12,3,0,0" />
+                    <WrapPanel DockPanel.Dock="Left" VerticalAlignment="Center">
+                        <CheckBox Content="Registry" IsChecked="{Binding UnifiedIncludeRegistry}" Margin="0,0,12,0" />
+                        <CheckBox Content="Services" IsChecked="{Binding UnifiedIncludeServices}" Margin="0,0,12,0" />
+                        <CheckBox Content="Scheduled Tasks" IsChecked="{Binding UnifiedIncludeScheduledTasks}" Margin="0,0,12,0" />
+                        <CheckBox Content="Startup" IsChecked="{Binding UnifiedIncludeStartup}" Margin="0,0,12,0" />
+                        <CheckBox Content="Environment" IsChecked="{Binding UnifiedIncludeEnvironment}" Margin="0,0,12,0" />
+                        <CheckBox Content="Hosts File" IsChecked="{Binding UnifiedIncludeHostsFile}" Margin="0,0,12,0" />
+                        <CheckBox Content="Firewall" IsChecked="{Binding UnifiedIncludeFirewall}" Margin="0,0,12,0" />
+                        <CheckBox Content="Applications" IsChecked="{Binding UnifiedIncludeInstalledApplications}" Margin="0,0,12,0" />
+                        <CheckBox Content="Files" IsChecked="{Binding UnifiedIncludeFileSystem}" />
+                    </WrapPanel>
+                    <TextBlock Text="{Binding UnifiedCaptureProgressText}" Foreground="#4B5563" VerticalAlignment="Center" />
+                </DockPanel>
+            </Grid>
+        </Border>
+
+        <TabControl Grid.Row="2" IsEnabled="{Binding IsUnifiedCaptureIdle}">
             <TabItem Header="Registry">
                 <Grid Margin="0,14,0,0">
                     <Grid.RowDefinitions>
@@ -787,7 +833,7 @@
             </TabItem>
         </TabControl>
 
-        <Border Grid.Row="2" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,16,0,0">
+        <Border Grid.Row="3" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,16,0,0">
             <TextBlock Text="{Binding Status}" Foreground="#374151" />
         </Border>
     </Grid>

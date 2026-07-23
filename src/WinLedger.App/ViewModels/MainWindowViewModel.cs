@@ -57,6 +57,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly IClock clock;
     private readonly TrackingSessionReopenService sessionReopenService;
+    private readonly TrackingSessionCaptureOrchestrator sessionCaptureOrchestrator;
     private readonly WpfElevatedRollbackService elevatedRollbackService;
     private readonly IRegistrySnapshotCollector registryCollector;
     private readonly IRegistrySnapshotStore registryStore;
@@ -139,7 +140,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private FileSystemRollbackPlan? fileSystemRollbackPlan;
     private FileSystemRollbackOperation? selectedFileSystemRollbackOperation;
     private TrackingSessionListItem? selectedSession;
+    private TrackingSession? unifiedTrackingSession;
+    private CancellationTokenSource? unifiedCaptureCancellation;
     private string status = "Ready";
+    private string unifiedSessionTitle = "Tracking session";
+    private string unifiedCaptureProgressText = "No capture running.";
+    private double unifiedCaptureProgressPercent;
+    private bool isUnifiedCaptureRunning;
+    private bool unifiedIncludeRegistry = true;
+    private bool unifiedIncludeServices = true;
+    private bool unifiedIncludeScheduledTasks = true;
+    private bool unifiedIncludeStartup = true;
+    private bool unifiedIncludeEnvironment = true;
+    private bool unifiedIncludeHostsFile = true;
+    private bool unifiedIncludeFirewall = true;
+    private bool unifiedIncludeInstalledApplications = true;
+    private bool unifiedIncludeFileSystem;
     private string registrySessionTitle = "Registry tracking session";
     private string serviceSessionTitle = "Services tracking session";
     private string scheduledTaskSessionTitle = "Scheduled tasks tracking session";
@@ -199,6 +215,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public MainWindowViewModel(
         IClock clock,
         TrackingSessionReopenService sessionReopenService,
+        TrackingSessionCaptureOrchestrator sessionCaptureOrchestrator,
         WpfElevatedRollbackService elevatedRollbackService,
         IRegistrySnapshotCollector registryCollector,
         IRegistrySnapshotStore registryStore,
@@ -248,6 +265,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         this.clock = clock;
         this.sessionReopenService = sessionReopenService;
+        this.sessionCaptureOrchestrator = sessionCaptureOrchestrator;
         this.elevatedRollbackService = elevatedRollbackService;
         this.registryCollector = registryCollector;
         this.registryStore = registryStore;
@@ -297,6 +315,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         RefreshSessionsCommand = new AsyncRelayCommand(RefreshSessionsAsync);
         OpenSelectedSessionCommand = new AsyncRelayCommand(OpenSelectedSessionAsync, () => SelectedSession is not null);
+        CaptureUnifiedBaselineCommand = new AsyncRelayCommand(CaptureUnifiedBaselineAsync, () => IsUnifiedCaptureIdle);
+        CaptureUnifiedComparisonCommand = new AsyncRelayCommand(CaptureUnifiedComparisonAsync, CanCaptureUnifiedComparison);
+        CancelUnifiedCaptureCommand = new AsyncRelayCommand(CancelUnifiedCaptureAsync, () => IsUnifiedCaptureRunning);
 
         CaptureRegistryBaselineCommand = new AsyncRelayCommand(CaptureRegistryBaselineAsync);
         CaptureRegistryComparisonCommand = new AsyncRelayCommand(CaptureRegistryComparisonAsync, () => registryBaselineSnapshot is not null);
@@ -403,6 +424,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand RefreshSessionsCommand { get; }
 
     public ICommand OpenSelectedSessionCommand { get; }
+
+    public ICommand CaptureUnifiedBaselineCommand { get; }
+
+    public ICommand CaptureUnifiedComparisonCommand { get; }
+
+    public ICommand CancelUnifiedCaptureCommand { get; }
 
     public ICommand CaptureRegistryBaselineCommand { get; }
 
@@ -544,6 +571,92 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => fileSystemSessionTitle;
         set => SetProperty(ref fileSystemSessionTitle, value);
+    }
+
+    public string UnifiedSessionTitle
+    {
+        get => unifiedSessionTitle;
+        set => SetProperty(ref unifiedSessionTitle, value);
+    }
+
+    public string UnifiedCaptureProgressText
+    {
+        get => unifiedCaptureProgressText;
+        private set => SetProperty(ref unifiedCaptureProgressText, value);
+    }
+
+    public double UnifiedCaptureProgressPercent
+    {
+        get => unifiedCaptureProgressPercent;
+        private set => SetProperty(ref unifiedCaptureProgressPercent, value);
+    }
+
+    public bool IsUnifiedCaptureRunning
+    {
+        get => isUnifiedCaptureRunning;
+        private set
+        {
+            if (SetProperty(ref isUnifiedCaptureRunning, value))
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsUnifiedCaptureIdle)));
+            }
+        }
+    }
+
+    public bool IsUnifiedCaptureIdle => !IsUnifiedCaptureRunning;
+
+    public bool UnifiedIncludeRegistry
+    {
+        get => unifiedIncludeRegistry;
+        set => SetProperty(ref unifiedIncludeRegistry, value);
+    }
+
+    public bool UnifiedIncludeServices
+    {
+        get => unifiedIncludeServices;
+        set => SetProperty(ref unifiedIncludeServices, value);
+    }
+
+    public bool UnifiedIncludeScheduledTasks
+    {
+        get => unifiedIncludeScheduledTasks;
+        set => SetProperty(ref unifiedIncludeScheduledTasks, value);
+    }
+
+    public bool UnifiedIncludeStartup
+    {
+        get => unifiedIncludeStartup;
+        set => SetProperty(ref unifiedIncludeStartup, value);
+    }
+
+    public bool UnifiedIncludeEnvironment
+    {
+        get => unifiedIncludeEnvironment;
+        set => SetProperty(ref unifiedIncludeEnvironment, value);
+    }
+
+    public bool UnifiedIncludeHostsFile
+    {
+        get => unifiedIncludeHostsFile;
+        set => SetProperty(ref unifiedIncludeHostsFile, value);
+    }
+
+    public bool UnifiedIncludeFirewall
+    {
+        get => unifiedIncludeFirewall;
+        set => SetProperty(ref unifiedIncludeFirewall, value);
+    }
+
+    public bool UnifiedIncludeInstalledApplications
+    {
+        get => unifiedIncludeInstalledApplications;
+        set => SetProperty(ref unifiedIncludeInstalledApplications, value);
+    }
+
+    public bool UnifiedIncludeFileSystem
+    {
+        get => unifiedIncludeFileSystem;
+        set => SetProperty(ref unifiedIncludeFileSystem, value);
     }
 
     public string FileSystemRootPath
@@ -738,6 +851,174 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private async Task CaptureUnifiedBaselineAsync()
+    {
+        ValidateUnifiedCaptureOptions();
+        await registryStore.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
+        var session = CreateSession(string.IsNullOrWhiteSpace(UnifiedSessionTitle) ? "Tracking session" : UnifiedSessionTitle);
+        await registryStore.SaveSessionAsync(session, CancellationToken.None).ConfigureAwait(true);
+        unifiedTrackingSession = session;
+        ApplySessionTitle(session.Title);
+
+        await RunUnifiedCaptureAsync(session.Id, TrackingSnapshotStage.Baseline).ConfigureAwait(true);
+    }
+
+    private async Task CaptureUnifiedComparisonAsync()
+    {
+        ValidateUnifiedCaptureOptions();
+        if (!CanCaptureUnifiedComparison())
+        {
+            Status = "Capture a unified baseline first.";
+            return;
+        }
+
+        await RunUnifiedCaptureAsync(unifiedTrackingSession!.Id, TrackingSnapshotStage.Comparison).ConfigureAwait(true);
+    }
+
+    private void ValidateUnifiedCaptureOptions()
+    {
+        var subsystems = CreateUnifiedSubsystems();
+        if (subsystems.Contains(TrackingSubsystemKind.Registry))
+        {
+            _ = CreateRegistryTargets();
+        }
+
+        if (subsystems.Contains(TrackingSubsystemKind.FileSystem))
+        {
+            _ = CreateFileSystemOptions();
+        }
+    }
+
+    private bool CanCaptureUnifiedComparison()
+    {
+        return IsUnifiedCaptureIdle &&
+               unifiedTrackingSession?.Status is TrackingSessionStatus.BaselineCaptured or TrackingSessionStatus.ComparisonCaptured;
+    }
+
+    private Task CancelUnifiedCaptureAsync()
+    {
+        unifiedCaptureCancellation?.Cancel();
+        UnifiedCaptureProgressText = "Cancel requested.";
+        Status = "Cancel requested.";
+        return Task.CompletedTask;
+    }
+
+    private async Task RunUnifiedCaptureAsync(Guid sessionId, TrackingSnapshotStage stage)
+    {
+        using var cancellation = new CancellationTokenSource();
+        unifiedCaptureCancellation = cancellation;
+        IsUnifiedCaptureRunning = true;
+        UnifiedCaptureProgressPercent = 0;
+        UnifiedCaptureProgressText = $"{stage} capture starting.";
+        RefreshCommands();
+
+        try
+        {
+            var request = CreateUnifiedCaptureRequest(sessionId, stage);
+            var progress = new Progress<TrackingSessionCaptureProgress>(UpdateUnifiedCaptureProgress);
+            var result = await Task.Run(
+                () => sessionCaptureOrchestrator.CaptureAsync(request, progress, cancellation.Token),
+                cancellation.Token).ConfigureAwait(true);
+
+            unifiedTrackingSession = result.Session;
+            var loadedSession = await sessionReopenService.LoadAsync(result.Session.Id, CancellationToken.None)
+                .ConfigureAwait(true);
+            ApplyLoadedSession(loadedSession);
+            UnifiedCaptureProgressPercent = 100;
+            UnifiedCaptureProgressText = $"{stage} capture complete: {result.Snapshots.Count} snapshots captured.";
+            Status = stage == TrackingSnapshotStage.Baseline
+                ? $"Unified baseline captured: {result.Snapshots.Count} snapshots."
+                : $"Unified comparison captured: {result.Snapshots.Count} snapshots.";
+            await RefreshSessionHistoryAsync(result.Session.Id, updateStatus: false).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            UnifiedCaptureProgressText = "Capture canceled.";
+            Status = "Capture canceled.";
+        }
+        finally
+        {
+            unifiedCaptureCancellation = null;
+            IsUnifiedCaptureRunning = false;
+            RefreshCommands();
+        }
+    }
+
+    private TrackingSessionCaptureRequest CreateUnifiedCaptureRequest(Guid sessionId, TrackingSnapshotStage stage)
+    {
+        var subsystems = CreateUnifiedSubsystems();
+        return new TrackingSessionCaptureRequest(
+            sessionId,
+            stage == TrackingSnapshotStage.Baseline ? "Baseline" : "Comparison",
+            stage,
+            subsystems,
+            subsystems.Contains(TrackingSubsystemKind.Registry) ? CreateRegistryTargets() : null,
+            subsystems.Contains(TrackingSubsystemKind.FileSystem) ? CreateFileSystemOptions() : null);
+    }
+
+    private IReadOnlyList<TrackingSubsystemKind> CreateUnifiedSubsystems()
+    {
+        var subsystems = new List<TrackingSubsystemKind>();
+        if (UnifiedIncludeRegistry)
+        {
+            subsystems.Add(TrackingSubsystemKind.Registry);
+        }
+
+        if (UnifiedIncludeServices)
+        {
+            subsystems.Add(TrackingSubsystemKind.Services);
+        }
+
+        if (UnifiedIncludeScheduledTasks)
+        {
+            subsystems.Add(TrackingSubsystemKind.ScheduledTasks);
+        }
+
+        if (UnifiedIncludeStartup)
+        {
+            subsystems.Add(TrackingSubsystemKind.Startup);
+        }
+
+        if (UnifiedIncludeEnvironment)
+        {
+            subsystems.Add(TrackingSubsystemKind.EnvironmentVariables);
+        }
+
+        if (UnifiedIncludeHostsFile)
+        {
+            subsystems.Add(TrackingSubsystemKind.HostsFile);
+        }
+
+        if (UnifiedIncludeFirewall)
+        {
+            subsystems.Add(TrackingSubsystemKind.Firewall);
+        }
+
+        if (UnifiedIncludeInstalledApplications)
+        {
+            subsystems.Add(TrackingSubsystemKind.InstalledApplications);
+        }
+
+        if (UnifiedIncludeFileSystem)
+        {
+            subsystems.Add(TrackingSubsystemKind.FileSystem);
+        }
+
+        if (subsystems.Count == 0)
+        {
+            throw new InvalidOperationException("Select at least one tracking area.");
+        }
+
+        return subsystems;
+    }
+
+    private void UpdateUnifiedCaptureProgress(TrackingSessionCaptureProgress progress)
+    {
+        var total = Math.Max(progress.TotalSubsystems, 1);
+        UnifiedCaptureProgressPercent = Math.Clamp(100d * progress.CompletedSubsystems / total, 0, 100);
+        UnifiedCaptureProgressText = $"{progress.Stage}: {progress.Subsystem} {progress.Message} ({progress.CompletedSubsystems}/{progress.TotalSubsystems})";
+    }
+
     private async Task RefreshSessionsOnStartupAsync()
     {
         try
@@ -789,6 +1070,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ApplyLoadedSession(LoadedTrackingSession loadedSession)
     {
+        unifiedTrackingSession = loadedSession.Session;
+        UnifiedSessionTitle = loadedSession.Session.Title;
         ApplySessionTitle(loadedSession.Session.Title);
 
         registryBaselineSnapshot = loadedSession.RegistryBaselineSnapshot;
@@ -2000,6 +2283,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void RefreshCommands()
     {
+        (CaptureUnifiedBaselineCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+        (CaptureUnifiedComparisonCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+        (CancelUnifiedCaptureCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (CaptureRegistryComparisonCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (ExportRegistryJsonCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
         (CreateRegistryRollbackPlanCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
@@ -2085,14 +2371,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         return principal.IsInRole(WindowsBuiltInRole.Administrator);
     }
 
-    private void SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
         {
-            return;
+            return false;
         }
 
         field = value;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        return true;
     }
 }
