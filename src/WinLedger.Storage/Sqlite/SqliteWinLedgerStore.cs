@@ -28,21 +28,12 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
 {
     private const int SchemaVersion = 9;
 
-    public async Task InitializeAsync(CancellationToken cancellationToken)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(databasePath)) ?? ".");
-
-        await using var connection = CreateConnection();
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-
-        await ExecuteNonQueryAsync(
-            connection,
+    private static readonly IReadOnlyList<SqliteMigration> Migrations =
+    [
+        new(
+            SchemaVersion,
+            "initial_schema",
             """
-            PRAGMA journal_mode = WAL;
-            CREATE TABLE IF NOT EXISTS schema_migrations (
-                version INTEGER PRIMARY KEY,
-                applied_at_utc TEXT NOT NULL
-            );
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
                 payload_json TEXT NOT NULL,
@@ -121,19 +112,33 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
                 payload_json TEXT NOT NULL,
                 FOREIGN KEY(session_id) REFERENCES sessions(id)
             );
-            INSERT OR IGNORE INTO schema_migrations(version, applied_at_utc)
-            VALUES ($version, $appliedAtUtc);
+            """)
+    ];
+
+    public async Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(databasePath)) ?? ".");
+
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+
+        await ExecuteNonQueryAsync(
+            connection,
+            """
+            PRAGMA journal_mode = WAL;
             """,
-            cancellationToken,
-            new SqliteParameter("$version", SchemaVersion),
-            new SqliteParameter("$appliedAtUtc", DateTimeOffset.UtcNow.ToString("O")))
+            cancellationToken)
+            .ConfigureAwait(false);
+
+        await EnsureMigrationTableAsync(connection, cancellationToken).ConfigureAwait(false);
+        await ApplyPendingMigrationsAsync(connection, cancellationToken).ConfigureAwait(false);
+
+        await ExecuteNonQueryAsync(connection, $"PRAGMA user_version = {SchemaVersion};", cancellationToken)
             .ConfigureAwait(false);
     }
 
     public async Task SaveSessionAsync(TrackingSession session, CancellationToken cancellationToken)
     {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await ExecuteNonQueryAsync(
             connection,
@@ -154,8 +159,7 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
 
     public async Task<TrackingSession?> GetSessionAsync(Guid sessionId, CancellationToken cancellationToken)
     {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT payload_json FROM sessions WHERE id = $id;";
@@ -169,8 +173,7 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
 
     public async Task<IReadOnlyList<TrackingSession>> ListSessionsAsync(CancellationToken cancellationToken)
     {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText =
@@ -430,8 +433,7 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
         string payloadJson,
         CancellationToken cancellationToken)
     {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await ExecuteNonQueryAsync(
             connection,
@@ -457,8 +459,7 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
         Guid snapshotId,
         CancellationToken cancellationToken)
     {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = $"SELECT payload_json FROM {tableName} WHERE id = $id;";
@@ -475,8 +476,7 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
         Guid sessionId,
         CancellationToken cancellationToken)
     {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText =
@@ -503,6 +503,14 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
         return snapshots;
     }
 
+    private async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
+    {
+        var connection = CreateConnection();
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteNonQueryAsync(connection, "PRAGMA foreign_keys = ON;", cancellationToken).ConfigureAwait(false);
+        return connection;
+    }
+
     private SqliteConnection CreateConnection()
     {
         var builder = new SqliteConnectionStringBuilder
@@ -513,15 +521,135 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
         return new SqliteConnection(builder.ToString());
     }
 
+    private static async Task EnsureMigrationTableAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await ExecuteNonQueryAsync(
+            connection,
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                name TEXT NOT NULL DEFAULT '',
+                applied_at_utc TEXT NOT NULL
+            );
+            """,
+            cancellationToken)
+            .ConfigureAwait(false);
+
+        var columns = await ReadColumnNamesAsync(connection, "schema_migrations", cancellationToken).ConfigureAwait(false);
+        if (!columns.Contains("name"))
+        {
+            await ExecuteNonQueryAsync(
+                connection,
+                "ALTER TABLE schema_migrations ADD COLUMN name TEXT NOT NULL DEFAULT '';",
+                cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private static async Task ApplyPendingMigrationsAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        var appliedVersions = await ReadAppliedMigrationVersionsAsync(connection, cancellationToken).ConfigureAwait(false);
+        using var transaction = connection.BeginTransaction();
+
+        foreach (var migration in Migrations)
+        {
+            if (!appliedVersions.Contains(migration.Version))
+            {
+                await ExecuteNonQueryAsync(connection, transaction, migration.Sql, cancellationToken).ConfigureAwait(false);
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
+                    """
+                    INSERT INTO schema_migrations(version, name, applied_at_utc)
+                    VALUES ($version, $name, $appliedAtUtc);
+                    """,
+                    cancellationToken,
+                    new SqliteParameter("$version", migration.Version),
+                    new SqliteParameter("$name", migration.Name),
+                    new SqliteParameter("$appliedAtUtc", DateTimeOffset.UtcNow.ToString("O")))
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await ExecuteNonQueryAsync(
+                    connection,
+                    transaction,
+                    """
+                    UPDATE schema_migrations
+                    SET name = $name
+                    WHERE version = $version AND name = '';
+                    """,
+                    cancellationToken,
+                    new SqliteParameter("$version", migration.Version),
+                    new SqliteParameter("$name", migration.Name))
+                    .ConfigureAwait(false);
+            }
+        }
+
+        transaction.Commit();
+    }
+
+    private static async Task<HashSet<int>> ReadAppliedMigrationVersionsAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT version FROM schema_migrations;";
+
+        var versions = new HashSet<int>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            versions.Add(reader.GetInt32(0));
+        }
+
+        return versions;
+    }
+
+    private static async Task<HashSet<string>> ReadColumnNamesAsync(
+        SqliteConnection connection,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info({tableName});";
+
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            columns.Add(reader.GetString(1));
+        }
+
+        return columns;
+    }
+
     private static async Task ExecuteNonQueryAsync(
         SqliteConnection connection,
         string commandText,
         CancellationToken cancellationToken,
         params SqliteParameter[] parameters)
     {
+        await ExecuteNonQueryAsync(connection, null, commandText, cancellationToken, parameters).ConfigureAwait(false);
+    }
+
+    private static async Task ExecuteNonQueryAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        string commandText,
+        CancellationToken cancellationToken,
+        params SqliteParameter[] parameters)
+    {
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = commandText;
         command.Parameters.AddRange(parameters);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    private sealed record SqliteMigration(int Version, string Name, string Sql);
 }

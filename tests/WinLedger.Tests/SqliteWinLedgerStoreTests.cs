@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using WinLedger.Domain.EnvironmentVariables;
 using WinLedger.Domain.FileSystem;
 using WinLedger.Domain.InstalledApplications;
@@ -15,7 +16,7 @@ public sealed class SqliteWinLedgerStoreTests
     [Fact]
     public async Task StorePersistsSessionRegistryServiceScheduledTaskStartupEnvironmentHostsFileFirewallInstalledApplicationAndFileSystemSnapshots()
     {
-        var databasePath = Path.Combine(Path.GetTempPath(), "WinLedgerTests", $"{Guid.NewGuid():N}.db");
+        var databasePath = CreateDatabasePath();
         var store = new SqliteWinLedgerStore(databasePath);
         await store.InitializeAsync(CancellationToken.None);
 
@@ -153,6 +154,41 @@ public sealed class SqliteWinLedgerStoreTests
         Assert.True(loadedFileSystemSnapshot?.Entries[0].HasRollbackData);
     }
 
+    [Fact]
+    public async Task InitializeAsyncRecordsAppliedMigration()
+    {
+        var databasePath = CreateDatabasePath();
+        var store = new SqliteWinLedgerStore(databasePath);
+        await store.InitializeAsync(CancellationToken.None);
+
+        await using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath
+        }.ToString());
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT name FROM schema_migrations WHERE version = 9;";
+
+        var migrationName = (string?)await command.ExecuteScalarAsync();
+        Assert.Equal("initial_schema", migrationName);
+    }
+
+    [Fact]
+    public async Task SaveRegistrySnapshotAsyncRejectsMissingSession()
+    {
+        var databasePath = CreateDatabasePath();
+        var store = new SqliteWinLedgerStore(databasePath);
+        await store.InitializeAsync(CancellationToken.None);
+
+        var snapshot = RegistrySnapshot.Empty(Guid.NewGuid(), "Orphan snapshot", DateTimeOffset.UtcNow);
+
+        var exception = await Assert.ThrowsAsync<SqliteException>(
+            () => store.SaveRegistrySnapshotAsync(snapshot, CancellationToken.None));
+
+        Assert.Equal(19, exception.SqliteErrorCode);
+    }
+
     private static ScheduledTaskDefinitionSnapshot TaskSnapshot(string path, bool enabled)
     {
         return new ScheduledTaskDefinitionSnapshot(
@@ -193,5 +229,10 @@ public sealed class SqliteWinLedgerStoreTests
             EnvironmentVariableValueType.ExpandString,
             value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             @"HKCU\Environment");
+    }
+
+    private static string CreateDatabasePath()
+    {
+        return Path.Combine(Path.GetTempPath(), "WinLedgerTests", $"{Guid.NewGuid():N}.db");
     }
 }
