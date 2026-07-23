@@ -20,4 +20,16 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <Target Name="CopyElevatedHelper" AfterTargets="Build">
+    <MSBuild Projects="..\WinLedger.ElevatedHelper\WinLedger.ElevatedHelper.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)" />
+    <ItemGroup>
+      <ElevatedHelperOutput Include="..\WinLedger.ElevatedHelper\bin\$(Configuration)\net10.0-windows\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ElevatedHelperOutput)"
+          DestinationFiles="@(ElevatedHelperOutput->'$(OutDir)helper\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

@@ -18,6 +18,7 @@ using WinLedger.Comparison.Services;
 using WinLedger.Comparison.Startup;
 using WinLedger.Core.Abstractions;
 using WinLedger.Core.EnvironmentVariables;
+using WinLedger.Core.Elevation;
 using WinLedger.Core.FileSystem;
 using WinLedger.Core.Firewall;
 using WinLedger.Core.Hosts;
@@ -55,47 +56,41 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly IClock clock;
     private readonly TrackingSessionReopenService sessionReopenService;
+    private readonly WpfElevatedRollbackService elevatedRollbackService;
     private readonly IRegistrySnapshotCollector registryCollector;
     private readonly IRegistrySnapshotStore registryStore;
     private readonly RegistrySnapshotComparer registryComparer;
     private readonly RegistryRollbackPlanner registryRollbackPlanner;
-    private readonly RegistryRollbackExecutor registryRollbackExecutor;
     private readonly RegistryReportExporter registryExporter;
     private readonly IServiceSnapshotCollector serviceCollector;
     private readonly IServiceSnapshotStore serviceStore;
     private readonly ServiceSnapshotComparer serviceComparer;
     private readonly ServiceRollbackPlanner serviceRollbackPlanner;
-    private readonly ServiceRollbackExecutor serviceRollbackExecutor;
     private readonly ServiceReportExporter serviceExporter;
     private readonly IScheduledTaskSnapshotCollector scheduledTaskCollector;
     private readonly IScheduledTaskSnapshotStore scheduledTaskStore;
     private readonly ScheduledTaskSnapshotComparer scheduledTaskComparer;
     private readonly ScheduledTaskRollbackPlanner scheduledTaskRollbackPlanner;
-    private readonly ScheduledTaskRollbackExecutor scheduledTaskRollbackExecutor;
     private readonly ScheduledTaskReportExporter scheduledTaskExporter;
     private readonly IStartupSnapshotCollector startupCollector;
     private readonly IStartupSnapshotStore startupStore;
     private readonly StartupSnapshotComparer startupComparer;
     private readonly StartupRollbackPlanner startupRollbackPlanner;
-    private readonly StartupRollbackExecutor startupRollbackExecutor;
     private readonly StartupReportExporter startupExporter;
     private readonly IEnvironmentSnapshotCollector environmentCollector;
     private readonly IEnvironmentSnapshotStore environmentStore;
     private readonly EnvironmentSnapshotComparer environmentComparer;
     private readonly EnvironmentRollbackPlanner environmentRollbackPlanner;
-    private readonly EnvironmentRollbackExecutor environmentRollbackExecutor;
     private readonly EnvironmentReportExporter environmentExporter;
     private readonly IHostsFileSnapshotCollector hostsFileCollector;
     private readonly IHostsFileSnapshotStore hostsFileStore;
     private readonly HostsFileSnapshotComparer hostsFileComparer;
     private readonly HostsFileRollbackPlanner hostsFileRollbackPlanner;
-    private readonly HostsFileRollbackExecutor hostsFileRollbackExecutor;
     private readonly HostsFileReportExporter hostsFileExporter;
     private readonly IFirewallSnapshotCollector firewallCollector;
     private readonly IFirewallSnapshotStore firewallStore;
     private readonly FirewallSnapshotComparer firewallComparer;
     private readonly FirewallRollbackPlanner firewallRollbackPlanner;
-    private readonly FirewallRollbackExecutor firewallRollbackExecutor;
     private readonly FirewallReportExporter firewallExporter;
     private readonly IInstalledApplicationSnapshotCollector installedApplicationCollector;
     private readonly IInstalledApplicationSnapshotStore installedApplicationStore;
@@ -106,7 +101,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IFileSystemSnapshotStore fileSystemStore;
     private readonly FileSystemSnapshotComparer fileSystemComparer;
     private readonly FileSystemRollbackPlanner fileSystemRollbackPlanner;
-    private readonly FileSystemRollbackExecutor fileSystemRollbackExecutor;
     private readonly FileSystemReportExporter fileSystemExporter;
     private RegistrySnapshot? registryBaselineSnapshot;
     private RegistryComparison? registryComparison;
@@ -203,47 +197,41 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public MainWindowViewModel(
         IClock clock,
         TrackingSessionReopenService sessionReopenService,
+        WpfElevatedRollbackService elevatedRollbackService,
         IRegistrySnapshotCollector registryCollector,
         IRegistrySnapshotStore registryStore,
         RegistrySnapshotComparer registryComparer,
         RegistryRollbackPlanner registryRollbackPlanner,
-        RegistryRollbackExecutor registryRollbackExecutor,
         RegistryReportExporter registryExporter,
         IServiceSnapshotCollector serviceCollector,
         IServiceSnapshotStore serviceStore,
         ServiceSnapshotComparer serviceComparer,
         ServiceRollbackPlanner serviceRollbackPlanner,
-        ServiceRollbackExecutor serviceRollbackExecutor,
         ServiceReportExporter serviceExporter,
         IScheduledTaskSnapshotCollector scheduledTaskCollector,
         IScheduledTaskSnapshotStore scheduledTaskStore,
         ScheduledTaskSnapshotComparer scheduledTaskComparer,
         ScheduledTaskRollbackPlanner scheduledTaskRollbackPlanner,
-        ScheduledTaskRollbackExecutor scheduledTaskRollbackExecutor,
         ScheduledTaskReportExporter scheduledTaskExporter,
         IStartupSnapshotCollector startupCollector,
         IStartupSnapshotStore startupStore,
         StartupSnapshotComparer startupComparer,
         StartupRollbackPlanner startupRollbackPlanner,
-        StartupRollbackExecutor startupRollbackExecutor,
         StartupReportExporter startupExporter,
         IEnvironmentSnapshotCollector environmentCollector,
         IEnvironmentSnapshotStore environmentStore,
         EnvironmentSnapshotComparer environmentComparer,
         EnvironmentRollbackPlanner environmentRollbackPlanner,
-        EnvironmentRollbackExecutor environmentRollbackExecutor,
         EnvironmentReportExporter environmentExporter,
         IHostsFileSnapshotCollector hostsFileCollector,
         IHostsFileSnapshotStore hostsFileStore,
         HostsFileSnapshotComparer hostsFileComparer,
         HostsFileRollbackPlanner hostsFileRollbackPlanner,
-        HostsFileRollbackExecutor hostsFileRollbackExecutor,
         HostsFileReportExporter hostsFileExporter,
         IFirewallSnapshotCollector firewallCollector,
         IFirewallSnapshotStore firewallStore,
         FirewallSnapshotComparer firewallComparer,
         FirewallRollbackPlanner firewallRollbackPlanner,
-        FirewallRollbackExecutor firewallRollbackExecutor,
         FirewallReportExporter firewallExporter,
         IInstalledApplicationSnapshotCollector installedApplicationCollector,
         IInstalledApplicationSnapshotStore installedApplicationStore,
@@ -254,52 +242,45 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         IFileSystemSnapshotStore fileSystemStore,
         FileSystemSnapshotComparer fileSystemComparer,
         FileSystemRollbackPlanner fileSystemRollbackPlanner,
-        FileSystemRollbackExecutor fileSystemRollbackExecutor,
         FileSystemReportExporter fileSystemExporter)
     {
         this.clock = clock;
         this.sessionReopenService = sessionReopenService;
+        this.elevatedRollbackService = elevatedRollbackService;
         this.registryCollector = registryCollector;
         this.registryStore = registryStore;
         this.registryComparer = registryComparer;
         this.registryRollbackPlanner = registryRollbackPlanner;
-        this.registryRollbackExecutor = registryRollbackExecutor;
         this.registryExporter = registryExporter;
         this.serviceCollector = serviceCollector;
         this.serviceStore = serviceStore;
         this.serviceComparer = serviceComparer;
         this.serviceRollbackPlanner = serviceRollbackPlanner;
-        this.serviceRollbackExecutor = serviceRollbackExecutor;
         this.serviceExporter = serviceExporter;
         this.scheduledTaskCollector = scheduledTaskCollector;
         this.scheduledTaskStore = scheduledTaskStore;
         this.scheduledTaskComparer = scheduledTaskComparer;
         this.scheduledTaskRollbackPlanner = scheduledTaskRollbackPlanner;
-        this.scheduledTaskRollbackExecutor = scheduledTaskRollbackExecutor;
         this.scheduledTaskExporter = scheduledTaskExporter;
         this.startupCollector = startupCollector;
         this.startupStore = startupStore;
         this.startupComparer = startupComparer;
         this.startupRollbackPlanner = startupRollbackPlanner;
-        this.startupRollbackExecutor = startupRollbackExecutor;
         this.startupExporter = startupExporter;
         this.environmentCollector = environmentCollector;
         this.environmentStore = environmentStore;
         this.environmentComparer = environmentComparer;
         this.environmentRollbackPlanner = environmentRollbackPlanner;
-        this.environmentRollbackExecutor = environmentRollbackExecutor;
         this.environmentExporter = environmentExporter;
         this.hostsFileCollector = hostsFileCollector;
         this.hostsFileStore = hostsFileStore;
         this.hostsFileComparer = hostsFileComparer;
         this.hostsFileRollbackPlanner = hostsFileRollbackPlanner;
-        this.hostsFileRollbackExecutor = hostsFileRollbackExecutor;
         this.hostsFileExporter = hostsFileExporter;
         this.firewallCollector = firewallCollector;
         this.firewallStore = firewallStore;
         this.firewallComparer = firewallComparer;
         this.firewallRollbackPlanner = firewallRollbackPlanner;
-        this.firewallRollbackExecutor = firewallRollbackExecutor;
         this.firewallExporter = firewallExporter;
         this.installedApplicationCollector = installedApplicationCollector;
         this.installedApplicationStore = installedApplicationStore;
@@ -310,7 +291,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         this.fileSystemStore = fileSystemStore;
         this.fileSystemComparer = fileSystemComparer;
         this.fileSystemRollbackPlanner = fileSystemRollbackPlanner;
-        this.fileSystemRollbackExecutor = fileSystemRollbackExecutor;
         this.fileSystemExporter = fileSystemExporter;
 
         RefreshSessionsCommand = new AsyncRelayCommand(RefreshSessionsAsync);
@@ -908,6 +888,31 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private static string CreateElevatedRollbackStatus(
+        ElevatedRollbackResponse response,
+        Guid operationId,
+        string targetDisplayName)
+    {
+        if (!response.Authenticated)
+        {
+            return "Rollback blocked: elevated helper authentication failed.";
+        }
+
+        var result = response.Results.FirstOrDefault(item => item.OperationId == operationId)
+            ?? response.Results.SingleOrDefault();
+        if (result is null)
+        {
+            var warning = response.Warnings.FirstOrDefault();
+            return string.IsNullOrWhiteSpace(warning)
+                ? "Rollback blocked: elevated helper returned no result."
+                : $"Rollback blocked: {warning}";
+        }
+
+        return result.Succeeded
+            ? $"Rollback completed: {targetDisplayName}"
+            : $"Rollback blocked: {result.Message}";
+    }
+
     private async Task CaptureRegistryBaselineAsync()
     {
         await registryStore.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
@@ -996,7 +1001,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ExecuteSelectedRegistryRollbackAsync()
     {
-        if (registryRollbackPlan is null || SelectedRegistryRollbackOperation is null)
+        if (registryRollbackPlan is null || registryComparison is null || SelectedRegistryRollbackOperation is null)
         {
             Status = "Select a registry rollback operation first.";
             return;
@@ -1014,15 +1019,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        var results = await registryRollbackExecutor.ApplyAsync(
-            registryRollbackPlan,
-            new HashSet<Guid> { SelectedRegistryRollbackOperation.Id },
+        var response = await elevatedRollbackService.ApplyAsync(
+            ElevatedRollbackSubsystem.Registry,
+            registryExporter.ExportJson(registryComparison, registryRollbackPlan),
+            SelectedRegistryRollbackOperation.Id,
             CancellationToken.None).ConfigureAwait(true);
-        var result = results.Single();
 
-        Status = result.Succeeded
-            ? $"Rollback completed: {SelectedRegistryRollbackOperation.TargetDisplayName}"
-            : $"Rollback blocked: {result.Message}";
+        Status = CreateElevatedRollbackStatus(
+            response,
+            SelectedRegistryRollbackOperation.Id,
+            SelectedRegistryRollbackOperation.TargetDisplayName);
     }
 
     private async Task CaptureServiceBaselineAsync()
@@ -1109,7 +1115,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ExecuteSelectedServiceRollbackAsync()
     {
-        if (serviceRollbackPlan is null || SelectedServiceRollbackOperation is null)
+        if (serviceRollbackPlan is null || serviceComparison is null || SelectedServiceRollbackOperation is null)
         {
             Status = "Select a service rollback operation first.";
             return;
@@ -1127,15 +1133,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        var results = await serviceRollbackExecutor.ApplyAsync(
-            serviceRollbackPlan,
-            new HashSet<Guid> { SelectedServiceRollbackOperation.Id },
+        var response = await elevatedRollbackService.ApplyAsync(
+            ElevatedRollbackSubsystem.Services,
+            serviceExporter.ExportJson(serviceComparison, serviceRollbackPlan),
+            SelectedServiceRollbackOperation.Id,
             CancellationToken.None).ConfigureAwait(true);
-        var result = results.Single();
 
-        Status = result.Succeeded
-            ? $"Rollback completed: {SelectedServiceRollbackOperation.TargetDisplayName}"
-            : $"Rollback blocked: {result.Message}";
+        Status = CreateElevatedRollbackStatus(
+            response,
+            SelectedServiceRollbackOperation.Id,
+            SelectedServiceRollbackOperation.TargetDisplayName);
     }
 
     private async Task CaptureScheduledTaskBaselineAsync()
@@ -1222,7 +1229,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ExecuteSelectedScheduledTaskRollbackAsync()
     {
-        if (scheduledTaskRollbackPlan is null || SelectedScheduledTaskRollbackOperation is null)
+        if (scheduledTaskRollbackPlan is null || scheduledTaskComparison is null || SelectedScheduledTaskRollbackOperation is null)
         {
             Status = "Select a scheduled task rollback operation first.";
             return;
@@ -1240,15 +1247,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        var results = await scheduledTaskRollbackExecutor.ApplyAsync(
-            scheduledTaskRollbackPlan,
-            new HashSet<Guid> { SelectedScheduledTaskRollbackOperation.Id },
+        var response = await elevatedRollbackService.ApplyAsync(
+            ElevatedRollbackSubsystem.ScheduledTasks,
+            scheduledTaskExporter.ExportJson(scheduledTaskComparison, scheduledTaskRollbackPlan),
+            SelectedScheduledTaskRollbackOperation.Id,
             CancellationToken.None).ConfigureAwait(true);
-        var result = results.Single();
 
-        Status = result.Succeeded
-            ? $"Rollback completed: {SelectedScheduledTaskRollbackOperation.TargetDisplayName}"
-            : $"Rollback blocked: {result.Message}";
+        Status = CreateElevatedRollbackStatus(
+            response,
+            SelectedScheduledTaskRollbackOperation.Id,
+            SelectedScheduledTaskRollbackOperation.TargetDisplayName);
     }
 
     private async Task CaptureStartupBaselineAsync()
@@ -1335,7 +1343,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ExecuteSelectedStartupRollbackAsync()
     {
-        if (startupRollbackPlan is null || SelectedStartupRollbackOperation is null)
+        if (startupRollbackPlan is null || startupComparison is null || SelectedStartupRollbackOperation is null)
         {
             Status = "Select a startup rollback operation first.";
             return;
@@ -1353,15 +1361,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        var results = await startupRollbackExecutor.ApplyAsync(
-            startupRollbackPlan,
-            new HashSet<Guid> { SelectedStartupRollbackOperation.Id },
+        var response = await elevatedRollbackService.ApplyAsync(
+            ElevatedRollbackSubsystem.Startup,
+            startupExporter.ExportJson(startupComparison, startupRollbackPlan),
+            SelectedStartupRollbackOperation.Id,
             CancellationToken.None).ConfigureAwait(true);
-        var result = results.Single();
 
-        Status = result.Succeeded
-            ? $"Rollback completed: {SelectedStartupRollbackOperation.TargetDisplayName}"
-            : $"Rollback blocked: {result.Message}";
+        Status = CreateElevatedRollbackStatus(
+            response,
+            SelectedStartupRollbackOperation.Id,
+            SelectedStartupRollbackOperation.TargetDisplayName);
     }
 
     private async Task CaptureEnvironmentBaselineAsync()
@@ -1448,7 +1457,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ExecuteSelectedEnvironmentRollbackAsync()
     {
-        if (environmentRollbackPlan is null || SelectedEnvironmentRollbackOperation is null)
+        if (environmentRollbackPlan is null || environmentComparison is null || SelectedEnvironmentRollbackOperation is null)
         {
             Status = "Select an environment rollback operation first.";
             return;
@@ -1466,15 +1475,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        var results = await environmentRollbackExecutor.ApplyAsync(
-            environmentRollbackPlan,
-            new HashSet<Guid> { SelectedEnvironmentRollbackOperation.Id },
+        var response = await elevatedRollbackService.ApplyAsync(
+            ElevatedRollbackSubsystem.Environment,
+            environmentExporter.ExportJson(environmentComparison, environmentRollbackPlan),
+            SelectedEnvironmentRollbackOperation.Id,
             CancellationToken.None).ConfigureAwait(true);
-        var result = results.Single();
 
-        Status = result.Succeeded
-            ? $"Rollback completed: {SelectedEnvironmentRollbackOperation.TargetDisplayName}"
-            : $"Rollback blocked: {result.Message}";
+        Status = CreateElevatedRollbackStatus(
+            response,
+            SelectedEnvironmentRollbackOperation.Id,
+            SelectedEnvironmentRollbackOperation.TargetDisplayName);
     }
 
     private async Task CaptureHostsFileBaselineAsync()
@@ -1563,7 +1573,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ExecuteSelectedHostsFileRollbackAsync()
     {
-        if (hostsFileRollbackPlan is null || SelectedHostsFileRollbackOperation is null)
+        if (hostsFileRollbackPlan is null || hostsFileComparison is null || SelectedHostsFileRollbackOperation is null)
         {
             Status = "Select a hosts file rollback operation first.";
             return;
@@ -1581,15 +1591,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        var results = await hostsFileRollbackExecutor.ApplyAsync(
-            hostsFileRollbackPlan,
-            new HashSet<Guid> { SelectedHostsFileRollbackOperation.Id },
+        var response = await elevatedRollbackService.ApplyAsync(
+            ElevatedRollbackSubsystem.HostsFile,
+            hostsFileExporter.ExportJson(hostsFileComparison, hostsFileRollbackPlan),
+            SelectedHostsFileRollbackOperation.Id,
             CancellationToken.None).ConfigureAwait(true);
-        var result = results.Single();
 
-        Status = result.Succeeded
-            ? $"Rollback completed: {SelectedHostsFileRollbackOperation.TargetDisplayName}"
-            : $"Rollback blocked: {result.Message}";
+        Status = CreateElevatedRollbackStatus(
+            response,
+            SelectedHostsFileRollbackOperation.Id,
+            SelectedHostsFileRollbackOperation.TargetDisplayName);
     }
 
     private async Task CaptureFirewallBaselineAsync()
@@ -1676,7 +1687,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ExecuteSelectedFirewallRollbackAsync()
     {
-        if (firewallRollbackPlan is null || SelectedFirewallRollbackOperation is null)
+        if (firewallRollbackPlan is null || firewallComparison is null || SelectedFirewallRollbackOperation is null)
         {
             Status = "Select a firewall rollback operation first.";
             return;
@@ -1694,15 +1705,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        var results = await firewallRollbackExecutor.ApplyAsync(
-            firewallRollbackPlan,
-            new HashSet<Guid> { SelectedFirewallRollbackOperation.Id },
+        var response = await elevatedRollbackService.ApplyAsync(
+            ElevatedRollbackSubsystem.Firewall,
+            firewallExporter.ExportJson(firewallComparison, firewallRollbackPlan),
+            SelectedFirewallRollbackOperation.Id,
             CancellationToken.None).ConfigureAwait(true);
-        var result = results.Single();
 
-        Status = result.Succeeded
-            ? $"Rollback completed: {SelectedFirewallRollbackOperation.TargetDisplayName}"
-            : $"Rollback blocked: {result.Message}";
+        Status = CreateElevatedRollbackStatus(
+            response,
+            SelectedFirewallRollbackOperation.Id,
+            SelectedFirewallRollbackOperation.TargetDisplayName);
     }
 
     private async Task CaptureInstalledApplicationsBaselineAsync()
@@ -1873,7 +1885,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private async Task ExecuteSelectedFileSystemRollbackAsync()
     {
-        if (fileSystemRollbackPlan is null || SelectedFileSystemRollbackOperation is null)
+        if (fileSystemRollbackPlan is null || fileSystemComparison is null || SelectedFileSystemRollbackOperation is null)
         {
             Status = "Select a file-system rollback operation first.";
             return;
@@ -1891,15 +1903,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             return;
         }
 
-        var results = await fileSystemRollbackExecutor.ApplyAsync(
-            fileSystemRollbackPlan,
-            new HashSet<Guid> { SelectedFileSystemRollbackOperation.Id },
+        var response = await elevatedRollbackService.ApplyAsync(
+            ElevatedRollbackSubsystem.FileSystem,
+            fileSystemExporter.ExportJson(fileSystemComparison, fileSystemRollbackPlan),
+            SelectedFileSystemRollbackOperation.Id,
             CancellationToken.None).ConfigureAwait(true);
-        var result = results.Single();
 
-        Status = result.Succeeded
-            ? $"Rollback completed: {SelectedFileSystemRollbackOperation.TargetDisplayName}"
-            : $"Rollback blocked: {result.Message}";
+        Status = CreateElevatedRollbackStatus(
+            response,
+            SelectedFileSystemRollbackOperation.Id,
+            SelectedFileSystemRollbackOperation.TargetDisplayName);
     }
 
     private FileSystemSnapshotOptions CreateFileSystemOptions()

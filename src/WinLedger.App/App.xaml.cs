@@ -13,6 +13,7 @@ using WinLedger.Comparison.Services;
 using WinLedger.Comparison.Startup;
 using WinLedger.Core.Abstractions;
 using WinLedger.Core.EnvironmentVariables;
+using WinLedger.Core.Elevation;
 using WinLedger.Core.FileSystem;
 using WinLedger.Core.Firewall;
 using WinLedger.Core.Hosts;
@@ -79,6 +80,7 @@ public partial class App : Application
             .AddSingleton<IInstalledApplicationSnapshotCollector, WindowsInstalledApplicationSnapshotCollector>()
             .AddSingleton<IFileSystemSnapshotCollector, WindowsFileSystemSnapshotCollector>()
             .AddSingleton<IFileSystemMutationProvider, WindowsFileSystemMutationProvider>()
+            .AddSingleton<ElevatedHelperClient>()
             .AddSingleton(_ => new SqliteWinLedgerStore(databasePath))
             .AddSingleton<ITrackingSessionStore>(provider => provider.GetRequiredService<SqliteWinLedgerStore>())
             .AddSingleton<IRegistrySnapshotStore>(provider => provider.GetRequiredService<SqliteWinLedgerStore>())
@@ -127,6 +129,7 @@ public partial class App : Application
             .AddSingleton<FileSystemReportExporter>()
             .AddSingleton<TrackingSessionCaptureOrchestrator>()
             .AddSingleton<TrackingSessionReopenService>()
+            .AddSingleton<WpfElevatedRollbackService>()
             .AddTransient<MainWindowViewModel>()
             .AddTransient<MainWindow>()
             .BuildServiceProvider();
