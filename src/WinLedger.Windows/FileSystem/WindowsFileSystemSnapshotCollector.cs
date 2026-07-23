@@ -16,10 +16,12 @@ public sealed class WindowsFileSystemSnapshotCollector(IClock clock) : IFileSyst
         var normalizedOptions = NormalizeOptions(options);
         var entries = new List<FileSystemEntrySnapshot>();
         var warnings = new List<string>();
+        var changeJournalStatesByVolume = new Dictionary<string, FileSystemChangeJournalState>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var root in normalizedOptions.MonitoredRoots)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            CaptureChangeJournalState(root, changeJournalStatesByVolume);
             await CaptureRootAsync(root, normalizedOptions, entries, warnings, cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -31,7 +33,12 @@ public sealed class WindowsFileSystemSnapshotCollector(IClock clock) : IFileSyst
             clock.UtcNow,
             normalizedOptions,
             entries.OrderBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase).ToArray(),
-            warnings.Distinct(StringComparer.Ordinal).ToArray());
+            warnings.Distinct(StringComparer.Ordinal).ToArray())
+        {
+            ChangeJournalStates = changeJournalStatesByVolume.Values
+                .OrderBy(state => state.VolumeRootPath, StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+        };
     }
 
     internal static FileSystemSnapshotOptions NormalizeOptions(FileSystemSnapshotOptions options)
@@ -142,6 +149,22 @@ public sealed class WindowsFileSystemSnapshotCollector(IClock clock) : IFileSyst
                     pending.Push(childPath);
                 }
             }
+        }
+    }
+
+    private static void CaptureChangeJournalState(
+        string root,
+        Dictionary<string, FileSystemChangeJournalState> statesByVolume)
+    {
+        if (!Directory.Exists(root) && !File.Exists(root))
+        {
+            return;
+        }
+
+        var state = WindowsChangeJournalReader.CaptureState(root);
+        if (!statesByVolume.ContainsKey(state.VolumeRootPath))
+        {
+            statesByVolume.Add(state.VolumeRootPath, state);
         }
     }
 

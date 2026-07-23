@@ -55,6 +55,12 @@ public sealed class FileSystemSnapshotComparer
             }
         }
 
+        var warnings = baseline.Warnings
+            .Concat(comparison.Warnings)
+            .Concat(FileSystemChangeJournalComparer.Compare(baseline, comparison))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
         return new FileSystemComparison(
             Guid.NewGuid(),
             baseline.SessionId,
@@ -62,7 +68,7 @@ public sealed class FileSystemSnapshotComparer
             comparison.Id,
             comparedAt,
             changes.OrderBy(change => change.TargetDisplayName, StringComparer.OrdinalIgnoreCase).ThenBy(change => change.Kind).ToArray(),
-            baseline.Warnings.Concat(comparison.Warnings).Distinct(StringComparer.Ordinal).ToArray());
+            warnings);
     }
 
     private static IReadOnlyList<(FileSystemEntrySnapshot Before, FileSystemEntrySnapshot After)> PairRenames(

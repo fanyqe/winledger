@@ -85,6 +85,8 @@ public sealed class WindowsFileSystemSnapshotCollectorTests
                 entry => entry.Path.EndsWith("tracked.txt", StringComparison.OrdinalIgnoreCase));
             Assert.NotNull(tracked.Sha256);
             Assert.False(tracked.HasRollbackData);
+            Assert.NotEmpty(snapshot.ChangeJournalStates);
+            Assert.All(snapshot.ChangeJournalStates, state => Assert.NotEmpty(state.VolumeRootPath));
         }
         finally
         {
