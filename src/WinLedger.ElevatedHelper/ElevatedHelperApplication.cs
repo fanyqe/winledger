@@ -66,6 +66,19 @@ internal sealed class ElevatedHelperApplication(IServiceProvider services)
             return Failure(request.RequestId, false, "Elevated helper authentication failed.");
         }
 
+        var helperProcessPath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(helperProcessPath))
+        {
+            return Failure(request.RequestId, true, "Elevated helper executable path could not be resolved.");
+        }
+
+        var helperSha256 = await ElevatedHelperFileVerifier.ComputeSha256Async(helperProcessPath, cancellationToken)
+            .ConfigureAwait(false);
+        if (!ElevatedHelperFileVerifier.MatchesSha256(helperSha256, request.HelperExecutableSha256))
+        {
+            return Failure(request.RequestId, true, "Elevated helper executable verification failed.");
+        }
+
         var auditLogger = services.GetRequiredService<ElevatedHelperAuditLogger>();
         await auditLogger.WriteAsync(
             request.RequestId,
@@ -104,7 +117,10 @@ internal sealed class ElevatedHelperApplication(IServiceProvider services)
         ElevatedRollbackRequest request,
         CancellationToken cancellationToken)
     {
-        var report = await ReadReportAsync<RegistryRollbackReport>(request.ReportJsonPath, cancellationToken).ConfigureAwait(false);
+        var report = await ReadReportAsync<RegistryRollbackReport>(
+            request.ReportJsonPath,
+            request.ReportSha256,
+            cancellationToken).ConfigureAwait(false);
         var selectedIds = ParseSelectedOperationIds(request.OperationSelector, report.RollbackPlan.Select(operation => operation.Id));
         var plan = new RegistryRollbackPlan(
             Guid.NewGuid(),
@@ -121,7 +137,10 @@ internal sealed class ElevatedHelperApplication(IServiceProvider services)
         ElevatedRollbackRequest request,
         CancellationToken cancellationToken)
     {
-        var report = await ReadReportAsync<ServiceRollbackReport>(request.ReportJsonPath, cancellationToken).ConfigureAwait(false);
+        var report = await ReadReportAsync<ServiceRollbackReport>(
+            request.ReportJsonPath,
+            request.ReportSha256,
+            cancellationToken).ConfigureAwait(false);
         var selectedIds = ParseSelectedOperationIds(request.OperationSelector, report.RollbackPlan.Select(operation => operation.Id));
         var plan = new ServiceRollbackPlan(
             Guid.NewGuid(),
@@ -138,7 +157,10 @@ internal sealed class ElevatedHelperApplication(IServiceProvider services)
         ElevatedRollbackRequest request,
         CancellationToken cancellationToken)
     {
-        var report = await ReadReportAsync<ScheduledTaskRollbackReport>(request.ReportJsonPath, cancellationToken).ConfigureAwait(false);
+        var report = await ReadReportAsync<ScheduledTaskRollbackReport>(
+            request.ReportJsonPath,
+            request.ReportSha256,
+            cancellationToken).ConfigureAwait(false);
         var selectedIds = ParseSelectedOperationIds(request.OperationSelector, report.RollbackPlan.Select(operation => operation.Id));
         var plan = new ScheduledTaskRollbackPlan(
             Guid.NewGuid(),
@@ -155,7 +177,10 @@ internal sealed class ElevatedHelperApplication(IServiceProvider services)
         ElevatedRollbackRequest request,
         CancellationToken cancellationToken)
     {
-        var report = await ReadReportAsync<StartupRollbackReport>(request.ReportJsonPath, cancellationToken).ConfigureAwait(false);
+        var report = await ReadReportAsync<StartupRollbackReport>(
+            request.ReportJsonPath,
+            request.ReportSha256,
+            cancellationToken).ConfigureAwait(false);
         var selectedIds = ParseSelectedOperationIds(request.OperationSelector, report.RollbackPlan.Select(operation => operation.Id));
         var plan = new StartupRollbackPlan(
             Guid.NewGuid(),
@@ -172,7 +197,10 @@ internal sealed class ElevatedHelperApplication(IServiceProvider services)
         ElevatedRollbackRequest request,
         CancellationToken cancellationToken)
     {
-        var report = await ReadReportAsync<EnvironmentRollbackReport>(request.ReportJsonPath, cancellationToken).ConfigureAwait(false);
+        var report = await ReadReportAsync<EnvironmentRollbackReport>(
+            request.ReportJsonPath,
+            request.ReportSha256,
+            cancellationToken).ConfigureAwait(false);
         var selectedIds = ParseSelectedOperationIds(request.OperationSelector, report.RollbackPlan.Select(operation => operation.Id));
         var plan = new EnvironmentRollbackPlan(
             Guid.NewGuid(),
@@ -189,7 +217,10 @@ internal sealed class ElevatedHelperApplication(IServiceProvider services)
         ElevatedRollbackRequest request,
         CancellationToken cancellationToken)
     {
-        var report = await ReadReportAsync<HostsFileRollbackReport>(request.ReportJsonPath, cancellationToken).ConfigureAwait(false);
+        var report = await ReadReportAsync<HostsFileRollbackReport>(
+            request.ReportJsonPath,
+            request.ReportSha256,
+            cancellationToken).ConfigureAwait(false);
         var selectedIds = ParseSelectedOperationIds(request.OperationSelector, report.RollbackPlan.Select(operation => operation.Id));
         var plan = new HostsFileRollbackPlan(
             Guid.NewGuid(),
@@ -206,7 +237,10 @@ internal sealed class ElevatedHelperApplication(IServiceProvider services)
         ElevatedRollbackRequest request,
         CancellationToken cancellationToken)
     {
-        var report = await ReadReportAsync<FirewallRollbackReport>(request.ReportJsonPath, cancellationToken).ConfigureAwait(false);
+        var report = await ReadReportAsync<FirewallRollbackReport>(
+            request.ReportJsonPath,
+            request.ReportSha256,
+            cancellationToken).ConfigureAwait(false);
         var selectedIds = ParseSelectedOperationIds(request.OperationSelector, report.RollbackPlan.Select(operation => operation.Id));
         var plan = new FirewallRollbackPlan(
             Guid.NewGuid(),
@@ -223,7 +257,10 @@ internal sealed class ElevatedHelperApplication(IServiceProvider services)
         ElevatedRollbackRequest request,
         CancellationToken cancellationToken)
     {
-        var report = await ReadReportAsync<FileSystemRollbackReport>(request.ReportJsonPath, cancellationToken).ConfigureAwait(false);
+        var report = await ReadReportAsync<FileSystemRollbackReport>(
+            request.ReportJsonPath,
+            request.ReportSha256,
+            cancellationToken).ConfigureAwait(false);
         var selectedIds = ParseSelectedOperationIds(request.OperationSelector, report.RollbackPlan.Select(operation => operation.Id));
         var plan = new FileSystemRollbackPlan(
             Guid.NewGuid(),
@@ -236,10 +273,19 @@ internal sealed class ElevatedHelperApplication(IServiceProvider services)
         return results.Select(result => new ElevatedRollbackOperationResult(result.OperationId, result.Succeeded, result.ValidationState, result.Message)).ToArray();
     }
 
-    private static async Task<TReport> ReadReportAsync<TReport>(string path, CancellationToken cancellationToken)
+    private static async Task<TReport> ReadReportAsync<TReport>(
+        string path,
+        string expectedSha256,
+        CancellationToken cancellationToken)
     {
-        var reportJson = await File.ReadAllTextAsync(Path.GetFullPath(path), cancellationToken).ConfigureAwait(false);
-        return JsonSerializer.Deserialize<TReport>(reportJson, WinLedgerJsonSerializer.Options)
+        var reportBytes = await File.ReadAllBytesAsync(Path.GetFullPath(path), cancellationToken).ConfigureAwait(false);
+        var actualSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(reportBytes));
+        if (!ElevatedHelperFileVerifier.MatchesSha256(actualSha256, expectedSha256))
+        {
+            throw new InvalidOperationException("Rollback report verification failed.");
+        }
+
+        return JsonSerializer.Deserialize<TReport>(reportBytes, WinLedgerJsonSerializer.Options)
             ?? throw new InvalidOperationException("Rollback report could not be read.");
     }
 

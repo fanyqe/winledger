@@ -5,6 +5,8 @@ public sealed record ElevatedRollbackRequest(
     Guid RequestId,
     ElevatedRollbackSubsystem Subsystem,
     string ReportJsonPath,
+    string ReportSha256,
     string OperationSelector,
     string AuthenticationTokenSha256,
+    string HelperExecutableSha256,
     DateTimeOffset CreatedAtUtc);
