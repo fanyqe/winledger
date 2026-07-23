@@ -26,7 +26,7 @@ public static class RegistryValueCodec
             RegistryValueType.Binary => (Convert.FromBase64String(JsonSerializer.Deserialize<string>(snapshot.SerializedValue) ?? string.Empty), RegistryValueKind.Binary),
             RegistryValueType.DWord => ((int)JsonSerializer.Deserialize<long>(snapshot.SerializedValue), RegistryValueKind.DWord),
             RegistryValueType.QWord => (JsonSerializer.Deserialize<long>(snapshot.SerializedValue), RegistryValueKind.QWord),
-            RegistryValueType.None => (Array.Empty<byte>(), RegistryValueKind.None),
+            RegistryValueType.None => (Convert.FromBase64String(JsonSerializer.Deserialize<string>(snapshot.SerializedValue) ?? string.Empty), RegistryValueKind.None),
             _ => throw new InvalidOperationException($"Unsupported registry value type '{snapshot.ValueType}'.")
         };
     }
@@ -52,9 +52,8 @@ public static class RegistryValueCodec
         {
             RegistryValueType.String or RegistryValueType.ExpandString => JsonSerializer.Serialize(value?.ToString() ?? string.Empty),
             RegistryValueType.MultiString => JsonSerializer.Serialize(value as string[] ?? Array.Empty<string>()),
-            RegistryValueType.Binary => JsonSerializer.Serialize(Convert.ToBase64String(value as byte[] ?? Array.Empty<byte>())),
+            RegistryValueType.Binary or RegistryValueType.None => JsonSerializer.Serialize(Convert.ToBase64String(value as byte[] ?? Array.Empty<byte>())),
             RegistryValueType.DWord or RegistryValueType.QWord => JsonSerializer.Serialize(Convert.ToInt64(value, CultureInfo.InvariantCulture)),
-            RegistryValueType.None => JsonSerializer.Serialize(string.Empty),
             _ => JsonSerializer.Serialize(value?.ToString() ?? string.Empty)
         };
     }
@@ -65,6 +64,7 @@ public static class RegistryValueCodec
         {
             RegistryValueType.MultiString => string.Join("; ", value as string[] ?? Array.Empty<string>()),
             RegistryValueType.Binary => $"Binary ({(value as byte[] ?? Array.Empty<byte>()).Length} bytes)",
+            RegistryValueType.None => $"None ({(value as byte[] ?? Array.Empty<byte>()).Length} bytes)",
             _ => value?.ToString() ?? string.Empty
         };
     }
