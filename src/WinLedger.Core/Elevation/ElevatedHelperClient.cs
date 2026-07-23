@@ -1,5 +1,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text.Json;
 using WinLedger.Domain;
 
@@ -34,8 +37,13 @@ public sealed class ElevatedHelperClient
 
         var requestId = Guid.NewGuid();
         var token = ElevatedHelperAuthenticator.GenerateToken();
+        var reportSha256 = await ElevatedHelperFileVerifier.ComputeSha256Async(reportPath, cancellationToken)
+            .ConfigureAwait(false);
+        var helperSha256 = await ElevatedHelperFileVerifier.ComputeSha256Async(helperPath, cancellationToken)
+            .ConfigureAwait(false);
         var requestDirectory = Path.Combine(Path.GetTempPath(), "WinLedger", "Elevation", requestId.ToString("N"));
         Directory.CreateDirectory(requestDirectory);
+        SecureRequestDirectory(requestDirectory);
 
         var requestPath = Path.Combine(requestDirectory, "request.json");
         var responsePath = Path.Combine(requestDirectory, "response.json");
@@ -44,8 +52,10 @@ public sealed class ElevatedHelperClient
             requestId,
             subsystem,
             reportPath,
+            reportSha256,
             operationSelector,
             ElevatedHelperAuthenticator.HashToken(token),
+            helperSha256,
             DateTimeOffset.UtcNow);
 
         await File.WriteAllTextAsync(
@@ -109,6 +119,54 @@ public sealed class ElevatedHelperClient
                     previousProcessToken,
                     EnvironmentVariableTarget.Process);
             }
+
+            TryDeleteDirectory(requestDirectory);
+        }
+    }
+
+    private static void SecureRequestDirectory(string requestDirectory)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var currentUser = WindowsIdentity.GetCurrent().User
+            ?? throw new InvalidOperationException("Current Windows user could not be resolved.");
+        var system = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+        var administrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        var security = new DirectorySecurity();
+        security.SetOwner(currentUser);
+        security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        security.AddAccessRule(CreateFullControlRule(currentUser));
+        security.AddAccessRule(CreateFullControlRule(system));
+        security.AddAccessRule(CreateFullControlRule(administrators));
+
+        new DirectoryInfo(requestDirectory).SetAccessControl(security);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static FileSystemAccessRule CreateFullControlRule(SecurityIdentifier identity)
+    {
+        return new FileSystemAccessRule(
+            identity,
+            FileSystemRights.FullControl,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+            PropagationFlags.None,
+            AccessControlType.Allow);
+    }
+
+    private static void TryDeleteDirectory(string requestDirectory)
+    {
+        try
+        {
+            if (Directory.Exists(requestDirectory))
+            {
+                Directory.Delete(requestDirectory, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
         }
     }
 }
