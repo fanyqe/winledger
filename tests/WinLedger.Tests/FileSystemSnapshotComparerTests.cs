@@ -53,4 +53,28 @@ public sealed class FileSystemSnapshotComparerTests
             FileSystemTestData.Snapshot(Guid.NewGuid(), FileSystemTestData.File("file.txt")),
             DateTimeOffset.UtcNow));
     }
+
+    [Fact]
+    public void CompareWarnsWhenChangeJournalContinuityIsLost()
+    {
+        var sessionId = Guid.NewGuid();
+        var baseline = FileSystemTestData.Snapshot(sessionId) with
+        {
+            ChangeJournalStates =
+            [
+                new FileSystemChangeJournalState(@"C:\", "NTFS", true, 100, 1, 50, 1, 1000, null)
+            ]
+        };
+        var comparison = FileSystemTestData.Snapshot(sessionId) with
+        {
+            ChangeJournalStates =
+            [
+                new FileSystemChangeJournalState(@"C:\", "NTFS", true, 100, 1, 90, 60, 1000, null)
+            ]
+        };
+
+        var result = new FileSystemSnapshotComparer().Compare(baseline, comparison, DateTimeOffset.UtcNow);
+
+        Assert.Contains(result.Warnings, warning => warning.Contains("trimmed", StringComparison.OrdinalIgnoreCase));
+    }
 }

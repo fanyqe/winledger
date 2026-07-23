@@ -7,4 +7,8 @@ public sealed record FileSystemSnapshot(
     DateTimeOffset CapturedAt,
     FileSystemSnapshotOptions Options,
     IReadOnlyList<FileSystemEntrySnapshot> Entries,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings)
+{
+    public IReadOnlyList<FileSystemChangeJournalState> ChangeJournalStates { get; init; } =
+        Array.Empty<FileSystemChangeJournalState>();
+}
