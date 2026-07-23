@@ -87,7 +87,7 @@ internal sealed class CliApplication(IServiceProvider services)
     {
         if (args.Length < 5)
         {
-            Console.Error.WriteLine("Usage: winledger registry-capture <database> <session-id> <snapshot-name> <registry-path>");
+            Console.Error.WriteLine("Usage: winledger registry-capture <database> <session-id> <snapshot-name> <registry-path|--sandbox|--profile profile-name> [additional-registry-path...]");
             return 2;
         }
 
@@ -103,9 +103,7 @@ internal sealed class CliApplication(IServiceProvider services)
         }
 
         var collector = services.GetRequiredService<IRegistrySnapshotCollector>();
-        var targets = string.Equals(args[4], "--sandbox", StringComparison.OrdinalIgnoreCase)
-            ? DefaultRegistrySnapshotTargets.MinimalSandboxTargets
-            : [new RegistrySnapshotTarget(RegistryPath.Parse(args[4]), true)];
+        var targets = ParseRegistryCaptureTargets(args.Skip(4).ToArray());
 
         var snapshot = await collector.CaptureAsync(session.Id, args[3], targets, CancellationToken.None)
             .ConfigureAwait(false);
@@ -116,6 +114,35 @@ internal sealed class CliApplication(IServiceProvider services)
         Console.WriteLine($"Keys: {snapshot.Keys.Count}");
         Console.WriteLine($"Warnings: {snapshot.Warnings.Count}");
         return 0;
+    }
+
+    private static IReadOnlyList<RegistrySnapshotTarget> ParseRegistryCaptureTargets(IReadOnlyList<string> args)
+    {
+        var targets = new List<RegistrySnapshotTarget>();
+        for (var index = 0; index < args.Count; index++)
+        {
+            switch (args[index].ToLowerInvariant())
+            {
+                case "--sandbox":
+                    targets.AddRange(DefaultRegistrySnapshotTargets.MinimalSandboxTargets);
+                    break;
+
+                case "--profile":
+                    if (index + 1 >= args.Count)
+                    {
+                        throw new ArgumentException("--profile requires a registry profile name.");
+                    }
+
+                    targets.AddRange(DefaultRegistrySnapshotTargets.ResolveProfile(args[++index]).Targets);
+                    break;
+
+                default:
+                    targets.Add(new RegistrySnapshotTarget(RegistryPath.Parse(args[index]), true));
+                    break;
+            }
+        }
+
+        return DefaultRegistrySnapshotTargets.NormalizeTargets(targets);
     }
 
     private async Task<int> CompareRegistryAsync(string[] args)
@@ -329,7 +356,7 @@ internal sealed class CliApplication(IServiceProvider services)
               winledger session-show <database> <session-id>
               winledger session-baseline <database> <session-id> <snapshot-name> [options]
               winledger session-comparison <database> <session-id> <snapshot-name> [options]
-              winledger registry-capture <database> <session-id> <snapshot-name> <registry-path>
+              winledger registry-capture <database> <session-id> <snapshot-name> <registry-path|--sandbox|--profile profile-name> [additional-registry-path...]
               winledger registry-compare <database> <baseline-snapshot-id> <comparison-snapshot-id> <report-output>
               winledger registry-rollback-apply <report-json> <operation-id|all>
               winledger service-capture <database> <session-id> <snapshot-name>
@@ -361,6 +388,7 @@ internal sealed class CliApplication(IServiceProvider services)
 
             Session capture options:
               --subsystems <names>                 Comma-separated list: all, registry, services, tasks, startup, environment, hosts, firewall, applications, files
+              --registry-profile <name>            Built-in registry profile: installer, user, machine, startup, policy, sandbox
               --registry-path <path>               Add a recursive registry target. Can be used more than once.
               --registry-sandbox                   Capture the built-in sandbox registry targets.
               --files-root <path>                  Add a monitored file-system root. Can be used more than once.
@@ -372,8 +400,8 @@ internal sealed class CliApplication(IServiceProvider services)
               winledger session create .\winledger.db "Installing ExampleApp"
               winledger session list .\winledger.db
               winledger session show .\winledger.db <session-id>
-              winledger session baseline .\winledger.db <session-id> Baseline --registry-sandbox --files-root .\Sandbox --hash
-              winledger session comparison .\winledger.db <session-id> Comparison --registry-sandbox --files-root .\Sandbox --hash
+              winledger session baseline .\winledger.db <session-id> Baseline --registry-profile installer --files-root .\Sandbox --hash
+              winledger session comparison .\winledger.db <session-id> Comparison --registry-profile installer --files-root .\Sandbox --hash
               winledger service-capture .\winledger.db <session-id> Baseline
               winledger task-capture .\winledger.db <session-id> Baseline
               winledger startup-capture .\winledger.db <session-id> Baseline

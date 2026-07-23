@@ -7,6 +7,7 @@ using System.Security.Principal;
 using System.Windows;
 using System.Windows.Input;
 using WinLedger.App.Infrastructure;
+using WinLedger.Collectors.Registry;
 using WinLedger.Comparison.EnvironmentVariables;
 using WinLedger.Comparison.FileSystem;
 using WinLedger.Comparison.Firewall;
@@ -156,7 +157,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool fileSystemCalculateHashes;
     private bool fileSystemBackupSmallFiles;
     private bool fileSystemIncludeNoise;
-    private string registryPath = @"HKCU\Software\WinLedger\TestSandbox";
+    private RegistryTrackingProfile selectedRegistryProfile = DefaultRegistrySnapshotTargets.DefaultProfile;
+    private string registryPath = string.Empty;
     private string registryExportPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "WinLedger",
@@ -359,6 +361,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<RegistryChange> RegistryChanges { get; } = [];
 
     public ObservableCollection<RegistryRollbackOperation> RegistryRollbackOperations { get; } = [];
+
+    public IReadOnlyList<RegistryTrackingProfile> RegistryProfiles { get; } =
+    [
+        ..DefaultRegistrySnapshotTargets.Profiles,
+        CustomRegistryProfile
+    ];
 
     public ObservableCollection<ServiceChange> ServiceChanges { get; } = [];
 
@@ -572,6 +580,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         get => registryPath;
         set => SetProperty(ref registryPath, value);
+    }
+
+    public RegistryTrackingProfile SelectedRegistryProfile
+    {
+        get => selectedRegistryProfile;
+        set => SetProperty(ref selectedRegistryProfile, value);
     }
 
     public string RegistryExportPath
@@ -857,10 +871,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private void ApplyLoadedTargets(LoadedTrackingSession loadedSession)
     {
-        var registryTarget = loadedSession.RegistryBaselineSnapshot?.Targets.FirstOrDefault();
-        if (registryTarget is not null)
+        var registryTargets = loadedSession.RegistryBaselineSnapshot?.Targets;
+        if (registryTargets is { Count: > 0 })
         {
-            RegistryPath = registryTarget.Path.ToString();
+            var profile = DefaultRegistrySnapshotTargets.FindProfileForTargets(registryTargets);
+            SelectedRegistryProfile = profile ?? CustomRegistryProfile;
+            RegistryPath = profile is null ? FormatRegistryTargets(registryTargets) : string.Empty;
         }
 
         var fileSystemOptions = loadedSession.FileSystemBaselineSnapshot?.Options;
@@ -921,7 +937,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         registryBaselineSnapshot = await registryCollector.CaptureAsync(
             session.Id,
             "Baseline",
-            [new RegistrySnapshotTarget(WinLedger.Domain.Registry.RegistryPath.Parse(RegistryPath), true)],
+            CreateRegistryTargets(),
             CancellationToken.None).ConfigureAwait(true);
         await registryStore.SaveRegistrySnapshotAsync(registryBaselineSnapshot, CancellationToken.None).ConfigureAwait(true);
         await UpdateSessionStatusAsync(registryStore, session.Id, TrackingSessionStatus.BaselineCaptured).ConfigureAwait(true);
@@ -930,7 +946,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         registryRollbackPlan = null;
         RegistryChanges.Clear();
         RegistryRollbackOperations.Clear();
-        Status = $"Baseline captured: {registryBaselineSnapshot.Keys.Count} registry keys.";
+        Status = $"Baseline captured: {registryBaselineSnapshot.Keys.Count} registry keys across {registryBaselineSnapshot.Targets.Count} targets.";
         await RefreshSessionHistoryAsync(session.Id, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
@@ -1931,6 +1947,40 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             backupSizeLimitBytes);
     }
 
+    private IReadOnlyList<RegistrySnapshotTarget> CreateRegistryTargets()
+    {
+        var targets = new List<RegistrySnapshotTarget>();
+        if (!string.Equals(SelectedRegistryProfile.Name, CustomRegistryProfile.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            targets.AddRange(SelectedRegistryProfile.Targets);
+        }
+
+        foreach (var path in ParseRegistryPathList(RegistryPath))
+        {
+            targets.Add(new RegistrySnapshotTarget(WinLedger.Domain.Registry.RegistryPath.Parse(path), IncludeSubKeys: true));
+        }
+
+        var normalizedTargets = DefaultRegistrySnapshotTargets.NormalizeTargets(targets);
+        if (normalizedTargets.Count == 0)
+        {
+            throw new InvalidOperationException("Choose a registry profile or enter at least one registry path.");
+        }
+
+        return normalizedTargets;
+    }
+
+    private static IEnumerable<string> ParseRegistryPathList(string value)
+    {
+        return value
+            .Split(['\r', '\n', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(path => !string.IsNullOrWhiteSpace(path));
+    }
+
+    private static string FormatRegistryTargets(IReadOnlyList<RegistrySnapshotTarget> targets)
+    {
+        return string.Join(Environment.NewLine, targets.Select(target => target.Path.ToString()));
+    }
+
     private static async Task WriteReportAsync(
         string path,
         Func<string> jsonExporter,
@@ -2000,6 +2050,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             IsAdministrator(),
             TrackingSessionStatus.Created);
     }
+
+    private static RegistryTrackingProfile CustomRegistryProfile { get; } = new(
+        "custom",
+        "Custom paths",
+        "Capture only the registry paths entered below.",
+        []);
 
     private static async Task UpdateSessionStatusAsync(
         ITrackingSessionStore store,

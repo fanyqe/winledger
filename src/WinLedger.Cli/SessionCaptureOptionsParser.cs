@@ -55,6 +55,11 @@ internal static class SessionCaptureOptionsParser
                     registryTargets.AddRange(DefaultRegistrySnapshotTargets.MinimalSandboxTargets);
                     break;
 
+                case "--registry-profile":
+                    EnsureOptionValue(options, index);
+                    registryTargets.AddRange(DefaultRegistrySnapshotTargets.ResolveProfile(options[++index]).Targets);
+                    break;
+
                 case "--registry-path":
                     EnsureOptionValue(options, index);
                     registryTargets.Add(new RegistrySnapshotTarget(RegistryPath.Parse(options[++index]), IncludeSubKeys: true));
@@ -97,6 +102,11 @@ internal static class SessionCaptureOptionsParser
             subsystems.Insert(0, TrackingSubsystemKind.Registry);
         }
 
+        if (subsystems.Contains(TrackingSubsystemKind.Registry) && registryTargets.Count == 0)
+        {
+            registryTargets.AddRange(DefaultRegistrySnapshotTargets.DefaultProfile.Targets);
+        }
+
         if (requestedSubsystems.Count == 0 && fileRoots.Count > 0)
         {
             subsystems.Add(TrackingSubsystemKind.FileSystem);
@@ -120,7 +130,7 @@ internal static class SessionCaptureOptionsParser
 
         return new SessionCaptureOptions(
             normalizedSubsystems,
-            registryTargets.Count > 0 ? registryTargets : null,
+            registryTargets.Count > 0 ? DefaultRegistrySnapshotTargets.NormalizeTargets(registryTargets) : null,
             fileSystemOptions);
     }
 

@@ -53,7 +53,8 @@
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="1.1*" />
-                                <ColumnDefinition Width="1.6*" />
+                                <ColumnDefinition Width="1.0*" />
+                                <ColumnDefinition Width="1.5*" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
@@ -63,12 +64,14 @@
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Grid.Column="0" Text="Session title" FontWeight="SemiBold" Foreground="#374151" />
-                            <TextBlock Grid.Row="0" Grid.Column="1" Text="Registry path" FontWeight="SemiBold" Foreground="#374151" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="Registry profile" FontWeight="SemiBold" Foreground="#374151" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Additional registry paths" FontWeight="SemiBold" Foreground="#374151" />
 
                             <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding RegistrySessionTitle, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
-                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding RegistryPath, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
-                            <Button Grid.Row="1" Grid.Column="2" Command="{Binding CaptureRegistryBaselineCommand}" Content="Capture Baseline" Height="34" Padding="14,0" Margin="0,6,8,0" />
-                            <Button Grid.Row="1" Grid.Column="3" Command="{Binding CaptureRegistryComparisonCommand}" Content="Finish and Compare" Height="34" Padding="14,0" Margin="0,6,0,0" />
+                            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding RegistryProfiles}" SelectedItem="{Binding SelectedRegistryProfile, Mode=TwoWay}" DisplayMemberPath="DisplayName" Height="34" Margin="0,6,12,0" />
+                            <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding RegistryPath, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" Height="54" Margin="0,6,12,0" />
+                            <Button Grid.Row="1" Grid.Column="3" Command="{Binding CaptureRegistryBaselineCommand}" Content="Capture Baseline" Height="34" Padding="14,0" Margin="0,6,8,0" />
+                            <Button Grid.Row="1" Grid.Column="4" Command="{Binding CaptureRegistryComparisonCommand}" Content="Finish and Compare" Height="34" Padding="14,0" Margin="0,6,0,0" />
                         </Grid>
                     </Border>
 

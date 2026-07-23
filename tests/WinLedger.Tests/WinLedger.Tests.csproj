@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\WinLedger.Storage\WinLedger.Storage.csproj" />
     <ProjectReference Include="..\..\src\WinLedger.Windows\WinLedger.Windows.csproj" />
     <ProjectReference Include="..\..\src\WinLedger.Collectors\WinLedger.Collectors.csproj" />
+    <ProjectReference Include="..\..\src\WinLedger.Cli\WinLedger.Cli.csproj" />
   </ItemGroup>
 
 </Project>
