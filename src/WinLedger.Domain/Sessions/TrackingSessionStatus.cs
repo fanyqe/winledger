@@ -4,6 +4,7 @@ public enum TrackingSessionStatus
 {
     Created,
     BaselineCaptured,
+    ComparisonCaptured,
     Compared,
     RollbackPlanned,
     RollbackApplied,
