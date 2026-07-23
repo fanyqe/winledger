@@ -69,13 +69,10 @@ public sealed class WindowsFileSystemMutationProvider : IFileSystemMutationProvi
             Directory.CreateDirectory(parent);
         }
 
-        await File.WriteAllBytesAsync(safePath, bytes, cancellationToken)
-            .ConfigureAwait(false);
+        safePath = ValidateMutationPath(rootPath, safePath);
 
-        if (lastWriteTimeUtc is not null)
-        {
-            File.SetLastWriteTimeUtc(safePath, lastWriteTimeUtc.Value.UtcDateTime);
-        }
+        await AtomicFileWriter.ReplaceAsync(safePath, bytes, lastWriteTimeUtc, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static string ValidateMutationPath(string rootPath, string path)
