@@ -110,7 +110,7 @@ public sealed class TrackingSessionCaptureOrchestratorTests
                 progress,
                 cancellation.Token));
 
-            Assert.Single(await store.ListServiceSnapshotsAsync(session.Id, CancellationToken.None));
+            Assert.Empty(await store.ListServiceSnapshotsAsync(session.Id, CancellationToken.None));
             Assert.Empty(await store.ListEnvironmentSnapshotsAsync(session.Id, CancellationToken.None));
 
             var storedSession = await store.GetSessionAsync(session.Id, CancellationToken.None);
@@ -145,6 +145,7 @@ public sealed class TrackingSessionCaptureOrchestratorTests
             collectors,
             store,
             collectors,
+            store,
             store);
     }
 

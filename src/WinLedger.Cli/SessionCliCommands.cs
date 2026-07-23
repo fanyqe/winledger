@@ -427,6 +427,7 @@ internal sealed class SessionCliCommands(IServiceProvider services)
             services.GetRequiredService<IInstalledApplicationSnapshotCollector>(),
             store,
             services.GetRequiredService<IFileSystemSnapshotCollector>(),
+            store,
             store);
     }
 
