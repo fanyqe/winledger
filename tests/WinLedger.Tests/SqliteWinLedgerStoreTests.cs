@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using WinLedger.Domain;
 using WinLedger.Domain.EnvironmentVariables;
 using WinLedger.Domain.FileSystem;
 using WinLedger.Domain.InstalledApplications;
@@ -247,6 +249,63 @@ public sealed class SqliteWinLedgerStoreTests
         Assert.Single(await store.ListRegistrySnapshotsAsync(retainedOldSession.Id, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task SaveRegistrySnapshotAsyncProtectsStoredSnapshotPayload()
+    {
+        var databasePath = CreateDatabasePath();
+        var store = new SqliteWinLedgerStore(databasePath);
+        await store.InitializeAsync(CancellationToken.None);
+
+        var session = Session("Protected snapshot session", DateTimeOffset.UtcNow);
+        await store.SaveSessionAsync(session, CancellationToken.None);
+
+        var keyPath = new RegistryPath(RegistryHiveKind.CurrentUser, @"Software\WinLedger\ProtectedPayload");
+        var snapshot = new RegistrySnapshot(
+            Guid.NewGuid(),
+            session.Id,
+            "Protected",
+            DateTimeOffset.UtcNow,
+            [new RegistrySnapshotTarget(keyPath)],
+            [new RegistryKeySnapshot(keyPath, [new RegistryValueSnapshot("Secret", RegistryValueType.String, "\"secret-value\"", "secret-value")])],
+            []);
+
+        await store.SaveRegistrySnapshotAsync(snapshot, CancellationToken.None);
+
+        var storedPayload = await ReadSnapshotPayloadAsync(databasePath, "registry_snapshots", snapshot.Id);
+        Assert.StartsWith("winledger-dpapi:v1:", storedPayload, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-value", storedPayload, StringComparison.Ordinal);
+
+        var loaded = await store.GetRegistrySnapshotAsync(snapshot.Id, CancellationToken.None);
+        Assert.Equal("secret-value", loaded?.Keys[0].Values[0].DisplayValue);
+    }
+
+    [Fact]
+    public async Task GetRegistrySnapshotAsyncReadsLegacyPlaintextPayload()
+    {
+        var databasePath = CreateDatabasePath();
+        var store = new SqliteWinLedgerStore(databasePath);
+        await store.InitializeAsync(CancellationToken.None);
+
+        var session = Session("Legacy snapshot session", DateTimeOffset.UtcNow);
+        await store.SaveSessionAsync(session, CancellationToken.None);
+
+        var snapshot = RegistrySnapshot.Empty(session.Id, "Legacy", DateTimeOffset.UtcNow);
+        var payloadJson = JsonSerializer.Serialize(snapshot, WinLedgerJsonSerializer.Options);
+        await InsertSnapshotPayloadAsync(
+            databasePath,
+            "registry_snapshots",
+            snapshot.Id,
+            session.Id,
+            snapshot.Name,
+            snapshot.CapturedAt,
+            payloadJson);
+
+        var loaded = await store.GetRegistrySnapshotAsync(snapshot.Id, CancellationToken.None);
+
+        Assert.Equal(snapshot.Id, loaded?.Id);
+        Assert.Equal("Legacy", loaded?.Name);
+    }
+
     private static ScheduledTaskDefinitionSnapshot TaskSnapshot(string path, bool enabled)
     {
         return new ScheduledTaskDefinitionSnapshot(
@@ -301,6 +360,55 @@ public sealed class SqliteWinLedgerStoreTests
             "redacted",
             false,
             TrackingSessionStatus.Created);
+    }
+
+    private static async Task<string> ReadSnapshotPayloadAsync(
+        string databasePath,
+        string tableName,
+        Guid snapshotId)
+    {
+        await using var connection = CreateSqliteConnection(databasePath);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT payload_json FROM {tableName} WHERE id = $id;";
+        command.Parameters.AddWithValue("$id", snapshotId.ToString());
+
+        return Assert.IsType<string>(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task InsertSnapshotPayloadAsync(
+        string databasePath,
+        string tableName,
+        Guid snapshotId,
+        Guid sessionId,
+        string name,
+        DateTimeOffset capturedAt,
+        string payloadJson)
+    {
+        await using var connection = CreateSqliteConnection(databasePath);
+        await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            $"""
+            INSERT INTO {tableName}(id, session_id, name, captured_at_utc, payload_json)
+            VALUES ($id, $sessionId, $name, $capturedAtUtc, $payloadJson);
+            """;
+        command.Parameters.AddWithValue("$id", snapshotId.ToString());
+        command.Parameters.AddWithValue("$sessionId", sessionId.ToString());
+        command.Parameters.AddWithValue("$name", name);
+        command.Parameters.AddWithValue("$capturedAtUtc", capturedAt.UtcDateTime.ToString("O"));
+        command.Parameters.AddWithValue("$payloadJson", payloadJson);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static SqliteConnection CreateSqliteConnection(string databasePath)
+    {
+        return new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath
+        }.ToString());
     }
 
     private static string CreateDatabasePath()
