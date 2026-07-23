@@ -1,6 +1,7 @@
 using WinLedger.Core.Abstractions;
 using WinLedger.Core.Hosts;
 using WinLedger.Domain.Hosts;
+using WinLedger.Windows.FileSystem;
 
 namespace WinLedger.Windows.Hosts;
 
@@ -26,7 +27,7 @@ public sealed class WindowsHostsFileMutationProvider(IClock clock) : IHostsFileM
     {
         var safePath = ValidateHostsPath(filePath);
         var bytes = Convert.FromBase64String(contentBase64);
-        await File.WriteAllBytesAsync(safePath, bytes, cancellationToken)
+        await AtomicFileWriter.ReplaceAsync(safePath, bytes, null, cancellationToken)
             .ConfigureAwait(false);
     }
 
