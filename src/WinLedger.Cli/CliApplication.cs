@@ -379,7 +379,7 @@ internal sealed class CliApplication(IServiceProvider services)
               winledger firewall-rollback-apply <report-json> <operation-id|all>
               winledger applications-capture <database> <session-id> <snapshot-name>
               winledger applications-compare <database> <baseline-snapshot-id> <comparison-snapshot-id> <report-output>
-              winledger files-capture <database> <session-id> <snapshot-name> <root-path> [--hash] [--backup-small-files <bytes>] [--include-noise]
+              winledger files-capture <database> <session-id> <snapshot-name> <root-path> [--hash|--no-hash] [--backup-small-files <bytes>] [--include-noise]
               winledger files-compare <database> <baseline-snapshot-id> <comparison-snapshot-id> <report-output>
               winledger files-rollback-apply <report-json> <operation-id|all>
               winledger elevated-rollback-apply <subsystem> <report-json> <operation-id|all> [helper-exe] [--no-elevation]
@@ -392,7 +392,8 @@ internal sealed class CliApplication(IServiceProvider services)
               --registry-path <path>               Add a recursive registry target. Can be used more than once.
               --registry-sandbox                   Capture the built-in sandbox registry targets.
               --files-root <path>                  Add a monitored file-system root. Can be used more than once.
-              --hash                               Calculate file hashes.
+              --hash                               Calculate file hashes. This is enabled by default.
+              --no-hash                            Skip file hashes for faster file-system capture.
               --backup-small-files <bytes>         Store small-file backup content up to the byte limit.
               --include-noise                      Include high-noise file-system paths.
 
@@ -400,8 +401,8 @@ internal sealed class CliApplication(IServiceProvider services)
               winledger session create .\winledger.db "Installing ExampleApp"
               winledger session list .\winledger.db
               winledger session show .\winledger.db <session-id>
-              winledger session baseline .\winledger.db <session-id> Baseline --registry-profile installer --files-root .\Sandbox --hash
-              winledger session comparison .\winledger.db <session-id> Comparison --registry-profile installer --files-root .\Sandbox --hash
+              winledger session baseline .\winledger.db <session-id> Baseline --registry-profile installer --files-root .\Sandbox
+              winledger session comparison .\winledger.db <session-id> Comparison --registry-profile installer --files-root .\Sandbox
               winledger service-capture .\winledger.db <session-id> Baseline
               winledger task-capture .\winledger.db <session-id> Baseline
               winledger startup-capture .\winledger.db <session-id> Baseline
@@ -409,7 +410,7 @@ internal sealed class CliApplication(IServiceProvider services)
               winledger hosts-capture .\winledger.db <session-id> Baseline
               winledger firewall-capture .\winledger.db <session-id> Baseline
               winledger applications-capture .\winledger.db <session-id> Baseline
-              winledger files-capture .\winledger.db <session-id> Baseline .\Sandbox --hash --backup-small-files 262144
+              winledger files-capture .\winledger.db <session-id> Baseline .\Sandbox --backup-small-files 262144
             """);
     }
 

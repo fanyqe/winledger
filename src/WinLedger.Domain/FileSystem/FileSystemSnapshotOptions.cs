@@ -8,6 +8,12 @@ public sealed record FileSystemSnapshotOptions(
     bool BackupSmallFiles,
     long BackupSizeLimitBytes)
 {
+    public const bool DefaultCalculateHashes = true;
+
+    public const bool DefaultBackupSmallFiles = false;
+
+    public const long DefaultBackupSizeLimitBytes = 0;
+
     public static readonly IReadOnlyList<string> DefaultExclusionPatterns =
     [
         @"\$Recycle.Bin\",
@@ -30,8 +36,8 @@ public sealed record FileSystemSnapshotOptions(
             roots,
             DefaultExclusionPatterns,
             false,
-            false,
-            false,
-            0);
+            DefaultCalculateHashes,
+            DefaultBackupSmallFiles,
+            DefaultBackupSizeLimitBytes);
     }
 }

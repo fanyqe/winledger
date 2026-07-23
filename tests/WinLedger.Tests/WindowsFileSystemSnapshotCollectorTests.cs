@@ -63,6 +63,38 @@ public sealed class WindowsFileSystemSnapshotCollectorTests
             entry.IsTemporaryOrHighNoise);
     }
 
+    [Fact]
+    public async Task CaptureAsyncCalculatesHashesWhenUsingDefaultOptions()
+    {
+        var root = System.IO.Path.Combine(AppContext.BaseDirectory, "WinLedgerFileSystemTests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(root);
+            var trackedPath = System.IO.Path.Combine(root, "tracked.txt");
+            await File.WriteAllTextAsync(trackedPath, "tracked");
+
+            var collector = new WindowsFileSystemSnapshotCollector(new FixedClock());
+            var snapshot = await collector.CaptureAsync(
+                Guid.NewGuid(),
+                "Baseline",
+                FileSystemSnapshotOptions.ForRoots(root),
+                CancellationToken.None);
+
+            var tracked = Assert.Single(
+                snapshot.Entries,
+                entry => entry.Path.EndsWith("tracked.txt", StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(tracked.Sha256);
+            Assert.False(tracked.HasRollbackData);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private sealed class FixedClock : IClock
     {
         public DateTimeOffset UtcNow { get; } = DateTimeOffset.Parse(
