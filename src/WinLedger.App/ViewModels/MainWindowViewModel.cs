@@ -26,6 +26,7 @@ using WinLedger.Core.Reports;
 using WinLedger.Core.Registry;
 using WinLedger.Core.ScheduledTasks;
 using WinLedger.Core.Services;
+using WinLedger.Core.Sessions;
 using WinLedger.Core.Startup;
 using WinLedger.Domain.EnvironmentVariables;
 using WinLedger.Domain.FileSystem;
@@ -53,6 +54,7 @@ namespace WinLedger.App.ViewModels;
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly IClock clock;
+    private readonly TrackingSessionReopenService sessionReopenService;
     private readonly IRegistrySnapshotCollector registryCollector;
     private readonly IRegistrySnapshotStore registryStore;
     private readonly RegistrySnapshotComparer registryComparer;
@@ -141,6 +143,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private FileSystemComparison? fileSystemComparison;
     private FileSystemRollbackPlan? fileSystemRollbackPlan;
     private FileSystemRollbackOperation? selectedFileSystemRollbackOperation;
+    private TrackingSessionListItem? selectedSession;
     private string status = "Ready";
     private string registrySessionTitle = "Registry tracking session";
     private string serviceSessionTitle = "Services tracking session";
@@ -199,6 +202,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public MainWindowViewModel(
         IClock clock,
+        TrackingSessionReopenService sessionReopenService,
         IRegistrySnapshotCollector registryCollector,
         IRegistrySnapshotStore registryStore,
         RegistrySnapshotComparer registryComparer,
@@ -254,6 +258,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         FileSystemReportExporter fileSystemExporter)
     {
         this.clock = clock;
+        this.sessionReopenService = sessionReopenService;
         this.registryCollector = registryCollector;
         this.registryStore = registryStore;
         this.registryComparer = registryComparer;
@@ -308,6 +313,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         this.fileSystemRollbackExecutor = fileSystemRollbackExecutor;
         this.fileSystemExporter = fileSystemExporter;
 
+        RefreshSessionsCommand = new AsyncRelayCommand(RefreshSessionsAsync);
+        OpenSelectedSessionCommand = new AsyncRelayCommand(OpenSelectedSessionAsync, () => SelectedSession is not null);
+
         CaptureRegistryBaselineCommand = new AsyncRelayCommand(CaptureRegistryBaselineAsync);
         CaptureRegistryComparisonCommand = new AsyncRelayCommand(CaptureRegistryComparisonAsync, () => registryBaselineSnapshot is not null);
         ExportRegistryJsonCommand = new AsyncRelayCommand(ExportRegistryJsonAsync, () => registryComparison is not null);
@@ -360,9 +368,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ExportFileSystemJsonCommand = new AsyncRelayCommand(ExportFileSystemJsonAsync, () => fileSystemComparison is not null);
         CreateFileSystemRollbackPlanCommand = new AsyncRelayCommand(CreateFileSystemRollbackPlanAsync, () => fileSystemComparison is not null);
         ExecuteSelectedFileSystemRollbackCommand = new AsyncRelayCommand(ExecuteSelectedFileSystemRollbackAsync, () => SelectedFileSystemRollbackOperation is not null);
+
+        _ = RefreshSessionsOnStartupAsync();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    public ObservableCollection<TrackingSessionListItem> SessionHistory { get; } = [];
 
     public ObservableCollection<RegistryChange> RegistryChanges { get; } = [];
 
@@ -399,6 +411,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ObservableCollection<FileSystemChange> FileSystemChanges { get; } = [];
 
     public ObservableCollection<FileSystemRollbackOperation> FileSystemRollbackOperations { get; } = [];
+
+    public ICommand RefreshSessionsCommand { get; }
+
+    public ICommand OpenSelectedSessionCommand { get; }
 
     public ICommand CaptureRegistryBaselineCommand { get; }
 
@@ -638,6 +654,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set => SetProperty(ref status, value);
     }
 
+    public TrackingSessionListItem? SelectedSession
+    {
+        get => selectedSession;
+        set
+        {
+            SetProperty(ref selectedSession, value);
+            (OpenSelectedSessionCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+        }
+    }
+
     public RegistryRollbackOperation? SelectedRegistryRollbackOperation
     {
         get => selectedRegistryRollbackOperation;
@@ -718,6 +744,170 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
     }
 
+    private async Task RefreshSessionsOnStartupAsync()
+    {
+        try
+        {
+            await RefreshSessionHistoryAsync(null, updateStatus: false).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            Status = $"Session history could not be loaded: {ex.Message}";
+        }
+    }
+
+    private async Task RefreshSessionsAsync()
+    {
+        await RefreshSessionHistoryAsync(SelectedSession?.Id, updateStatus: true).ConfigureAwait(true);
+    }
+
+    private async Task RefreshSessionHistoryAsync(Guid? selectedSessionId, bool updateStatus)
+    {
+        var sessions = await sessionReopenService.ListSessionsAsync(CancellationToken.None).ConfigureAwait(true);
+        SessionHistory.Clear();
+        foreach (var session in sessions)
+        {
+            SessionHistory.Add(session);
+        }
+
+        SelectedSession = selectedSessionId.HasValue
+            ? SessionHistory.FirstOrDefault(session => session.Id == selectedSessionId.Value)
+            : SessionHistory.FirstOrDefault();
+
+        if (updateStatus)
+        {
+            Status = $"Session history loaded: {SessionHistory.Count} sessions.";
+        }
+    }
+
+    private async Task OpenSelectedSessionAsync()
+    {
+        if (SelectedSession is null)
+        {
+            Status = "Select a session first.";
+            return;
+        }
+
+        var loadedSession = await sessionReopenService.LoadAsync(SelectedSession.Id, CancellationToken.None)
+            .ConfigureAwait(true);
+        ApplyLoadedSession(loadedSession);
+    }
+
+    private void ApplyLoadedSession(LoadedTrackingSession loadedSession)
+    {
+        ApplySessionTitle(loadedSession.Session.Title);
+
+        registryBaselineSnapshot = loadedSession.RegistryBaselineSnapshot;
+        serviceBaselineSnapshot = loadedSession.ServiceBaselineSnapshot;
+        scheduledTaskBaselineSnapshot = loadedSession.ScheduledTaskBaselineSnapshot;
+        startupBaselineSnapshot = loadedSession.StartupBaselineSnapshot;
+        environmentBaselineSnapshot = loadedSession.EnvironmentBaselineSnapshot;
+        hostsFileBaselineSnapshot = loadedSession.HostsFileBaselineSnapshot;
+        firewallBaselineSnapshot = loadedSession.FirewallBaselineSnapshot;
+        installedApplicationBaselineSnapshot = loadedSession.InstalledApplicationsBaselineSnapshot;
+        fileSystemBaselineSnapshot = loadedSession.FileSystemBaselineSnapshot;
+
+        registryComparison = loadedSession.RegistryComparison;
+        serviceComparison = loadedSession.ServiceComparison;
+        scheduledTaskComparison = loadedSession.ScheduledTaskComparison;
+        startupComparison = loadedSession.StartupComparison;
+        environmentComparison = loadedSession.EnvironmentComparison;
+        hostsFileComparison = loadedSession.HostsFileComparison;
+        firewallComparison = loadedSession.FirewallComparison;
+        installedApplicationComparison = loadedSession.InstalledApplicationsComparison;
+        fileSystemComparison = loadedSession.FileSystemComparison;
+
+        registryRollbackPlan = null;
+        serviceRollbackPlan = null;
+        scheduledTaskRollbackPlan = null;
+        startupRollbackPlan = null;
+        environmentRollbackPlan = null;
+        hostsFileRollbackPlan = null;
+        firewallRollbackPlan = null;
+        installedApplicationRollbackPlan = null;
+        fileSystemRollbackPlan = null;
+
+        SelectedRegistryRollbackOperation = null;
+        SelectedServiceRollbackOperation = null;
+        SelectedScheduledTaskRollbackOperation = null;
+        SelectedStartupRollbackOperation = null;
+        SelectedEnvironmentRollbackOperation = null;
+        SelectedHostsFileRollbackOperation = null;
+        SelectedFirewallRollbackOperation = null;
+        SelectedFileSystemRollbackOperation = null;
+
+        ReplaceCollection(RegistryChanges, registryComparison?.Changes);
+        ReplaceCollection(ServiceChanges, serviceComparison?.Changes);
+        ReplaceCollection(ScheduledTaskChanges, scheduledTaskComparison?.Changes);
+        ReplaceCollection(StartupChanges, startupComparison?.Changes);
+        ReplaceCollection(EnvironmentChanges, environmentComparison?.Changes);
+        ReplaceCollection(HostsFileChanges, hostsFileComparison?.Changes);
+        ReplaceCollection(FirewallChanges, firewallComparison?.Changes);
+        ReplaceCollection(InstalledApplicationChanges, installedApplicationComparison?.Changes);
+        ReplaceCollection(FileSystemChanges, fileSystemComparison?.Changes);
+
+        RegistryRollbackOperations.Clear();
+        ServiceRollbackOperations.Clear();
+        ScheduledTaskRollbackOperations.Clear();
+        StartupRollbackOperations.Clear();
+        EnvironmentRollbackOperations.Clear();
+        HostsFileRollbackOperations.Clear();
+        FirewallRollbackOperations.Clear();
+        InstalledApplicationRollbackWarnings.Clear();
+        FileSystemRollbackOperations.Clear();
+
+        ApplyLoadedTargets(loadedSession);
+
+        Status = $"Session opened: {loadedSession.Session.Title}.";
+        RefreshCommands();
+    }
+
+    private void ApplySessionTitle(string title)
+    {
+        RegistrySessionTitle = title;
+        ServiceSessionTitle = title;
+        ScheduledTaskSessionTitle = title;
+        StartupSessionTitle = title;
+        EnvironmentSessionTitle = title;
+        HostsFileSessionTitle = title;
+        FirewallSessionTitle = title;
+        InstalledApplicationsSessionTitle = title;
+        FileSystemSessionTitle = title;
+    }
+
+    private void ApplyLoadedTargets(LoadedTrackingSession loadedSession)
+    {
+        var registryTarget = loadedSession.RegistryBaselineSnapshot?.Targets.FirstOrDefault();
+        if (registryTarget is not null)
+        {
+            RegistryPath = registryTarget.Path.ToString();
+        }
+
+        var fileSystemOptions = loadedSession.FileSystemBaselineSnapshot?.Options;
+        if (fileSystemOptions is not null)
+        {
+            FileSystemRootPath = fileSystemOptions.MonitoredRoots.FirstOrDefault() ?? FileSystemRootPath;
+            FileSystemCalculateHashes = fileSystemOptions.CalculateHashes;
+            FileSystemBackupSmallFiles = fileSystemOptions.BackupSmallFiles;
+            FileSystemIncludeNoise = fileSystemOptions.IncludeHighNoise;
+            FileSystemBackupSizeLimitText = fileSystemOptions.BackupSizeLimitBytes.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    private static void ReplaceCollection<T>(ObservableCollection<T> collection, IEnumerable<T>? values)
+    {
+        collection.Clear();
+        if (values is null)
+        {
+            return;
+        }
+
+        foreach (var value in values)
+        {
+            collection.Add(value);
+        }
+    }
+
     private async Task CaptureRegistryBaselineAsync()
     {
         await registryStore.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
@@ -729,12 +919,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             [new RegistrySnapshotTarget(WinLedger.Domain.Registry.RegistryPath.Parse(RegistryPath), true)],
             CancellationToken.None).ConfigureAwait(true);
         await registryStore.SaveRegistrySnapshotAsync(registryBaselineSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(registryStore, session.Id, TrackingSessionStatus.BaselineCaptured).ConfigureAwait(true);
 
         registryComparison = null;
         registryRollbackPlan = null;
         RegistryChanges.Clear();
         RegistryRollbackOperations.Clear();
         Status = $"Baseline captured: {registryBaselineSnapshot.Keys.Count} registry keys.";
+        await RefreshSessionHistoryAsync(session.Id, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -752,6 +944,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             registryBaselineSnapshot.Targets,
             CancellationToken.None).ConfigureAwait(true);
         await registryStore.SaveRegistrySnapshotAsync(comparisonSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(registryStore, registryBaselineSnapshot.SessionId, TrackingSessionStatus.ComparisonCaptured).ConfigureAwait(true);
 
         registryComparison = registryComparer.Compare(registryBaselineSnapshot, comparisonSnapshot, clock.UtcNow);
         RegistryChanges.Clear();
@@ -761,6 +954,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         Status = $"Comparison complete: {registryComparison.Changes.Count} registry changes.";
+        await RefreshSessionHistoryAsync(registryBaselineSnapshot.SessionId, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -841,12 +1035,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Baseline",
             CancellationToken.None).ConfigureAwait(true);
         await serviceStore.SaveServiceSnapshotAsync(serviceBaselineSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(serviceStore, session.Id, TrackingSessionStatus.BaselineCaptured).ConfigureAwait(true);
 
         serviceComparison = null;
         serviceRollbackPlan = null;
         ServiceChanges.Clear();
         ServiceRollbackOperations.Clear();
         Status = $"Baseline captured: {serviceBaselineSnapshot.Services.Count} services.";
+        await RefreshSessionHistoryAsync(session.Id, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -863,6 +1059,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Comparison",
             CancellationToken.None).ConfigureAwait(true);
         await serviceStore.SaveServiceSnapshotAsync(comparisonSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(serviceStore, serviceBaselineSnapshot.SessionId, TrackingSessionStatus.ComparisonCaptured).ConfigureAwait(true);
 
         serviceComparison = serviceComparer.Compare(serviceBaselineSnapshot, comparisonSnapshot, clock.UtcNow);
         ServiceChanges.Clear();
@@ -872,6 +1069,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         Status = $"Comparison complete: {serviceComparison.Changes.Count} service changes.";
+        await RefreshSessionHistoryAsync(serviceBaselineSnapshot.SessionId, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -950,12 +1148,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Baseline",
             CancellationToken.None).ConfigureAwait(true);
         await scheduledTaskStore.SaveScheduledTaskSnapshotAsync(scheduledTaskBaselineSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(scheduledTaskStore, session.Id, TrackingSessionStatus.BaselineCaptured).ConfigureAwait(true);
 
         scheduledTaskComparison = null;
         scheduledTaskRollbackPlan = null;
         ScheduledTaskChanges.Clear();
         ScheduledTaskRollbackOperations.Clear();
         Status = $"Baseline captured: {scheduledTaskBaselineSnapshot.Tasks.Count} scheduled tasks.";
+        await RefreshSessionHistoryAsync(session.Id, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -972,6 +1172,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Comparison",
             CancellationToken.None).ConfigureAwait(true);
         await scheduledTaskStore.SaveScheduledTaskSnapshotAsync(comparisonSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(scheduledTaskStore, scheduledTaskBaselineSnapshot.SessionId, TrackingSessionStatus.ComparisonCaptured).ConfigureAwait(true);
 
         scheduledTaskComparison = scheduledTaskComparer.Compare(scheduledTaskBaselineSnapshot, comparisonSnapshot, clock.UtcNow);
         ScheduledTaskChanges.Clear();
@@ -981,6 +1182,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         Status = $"Comparison complete: {scheduledTaskComparison.Changes.Count} scheduled task changes.";
+        await RefreshSessionHistoryAsync(scheduledTaskBaselineSnapshot.SessionId, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1059,12 +1261,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Baseline",
             CancellationToken.None).ConfigureAwait(true);
         await startupStore.SaveStartupSnapshotAsync(startupBaselineSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(startupStore, session.Id, TrackingSessionStatus.BaselineCaptured).ConfigureAwait(true);
 
         startupComparison = null;
         startupRollbackPlan = null;
         StartupChanges.Clear();
         StartupRollbackOperations.Clear();
         Status = $"Baseline captured: {startupBaselineSnapshot.Entries.Count} startup entries.";
+        await RefreshSessionHistoryAsync(session.Id, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1081,6 +1285,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Comparison",
             CancellationToken.None).ConfigureAwait(true);
         await startupStore.SaveStartupSnapshotAsync(comparisonSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(startupStore, startupBaselineSnapshot.SessionId, TrackingSessionStatus.ComparisonCaptured).ConfigureAwait(true);
 
         startupComparison = startupComparer.Compare(startupBaselineSnapshot, comparisonSnapshot, clock.UtcNow);
         StartupChanges.Clear();
@@ -1090,6 +1295,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         Status = $"Comparison complete: {startupComparison.Changes.Count} startup changes.";
+        await RefreshSessionHistoryAsync(startupBaselineSnapshot.SessionId, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1168,12 +1374,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Baseline",
             CancellationToken.None).ConfigureAwait(true);
         await environmentStore.SaveEnvironmentSnapshotAsync(environmentBaselineSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(environmentStore, session.Id, TrackingSessionStatus.BaselineCaptured).ConfigureAwait(true);
 
         environmentComparison = null;
         environmentRollbackPlan = null;
         EnvironmentChanges.Clear();
         EnvironmentRollbackOperations.Clear();
         Status = $"Baseline captured: {environmentBaselineSnapshot.Variables.Count} environment variables.";
+        await RefreshSessionHistoryAsync(session.Id, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1190,6 +1398,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Comparison",
             CancellationToken.None).ConfigureAwait(true);
         await environmentStore.SaveEnvironmentSnapshotAsync(comparisonSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(environmentStore, environmentBaselineSnapshot.SessionId, TrackingSessionStatus.ComparisonCaptured).ConfigureAwait(true);
 
         environmentComparison = environmentComparer.Compare(environmentBaselineSnapshot, comparisonSnapshot, clock.UtcNow);
         EnvironmentChanges.Clear();
@@ -1199,6 +1408,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         Status = $"Comparison complete: {environmentComparison.Changes.Count} environment changes.";
+        await RefreshSessionHistoryAsync(environmentBaselineSnapshot.SessionId, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1277,6 +1487,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Baseline",
             CancellationToken.None).ConfigureAwait(true);
         await hostsFileStore.SaveHostsFileSnapshotAsync(hostsFileBaselineSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(hostsFileStore, session.Id, TrackingSessionStatus.BaselineCaptured).ConfigureAwait(true);
 
         hostsFileComparison = null;
         hostsFileRollbackPlan = null;
@@ -1285,6 +1496,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         Status = hostsFileBaselineSnapshot.Exists
             ? $"Baseline captured: {hostsFileBaselineSnapshot.Lines.Count} hosts file lines."
             : $"Baseline captured: hosts file missing. Warnings: {hostsFileBaselineSnapshot.Warnings.Count}.";
+        await RefreshSessionHistoryAsync(session.Id, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1301,6 +1513,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Comparison",
             CancellationToken.None).ConfigureAwait(true);
         await hostsFileStore.SaveHostsFileSnapshotAsync(comparisonSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(hostsFileStore, hostsFileBaselineSnapshot.SessionId, TrackingSessionStatus.ComparisonCaptured).ConfigureAwait(true);
 
         hostsFileComparison = hostsFileComparer.Compare(hostsFileBaselineSnapshot, comparisonSnapshot, clock.UtcNow);
         HostsFileChanges.Clear();
@@ -1310,6 +1523,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         Status = $"Comparison complete: {hostsFileComparison.Changes.Count} hosts file changes.";
+        await RefreshSessionHistoryAsync(hostsFileBaselineSnapshot.SessionId, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1388,12 +1602,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Baseline",
             CancellationToken.None).ConfigureAwait(true);
         await firewallStore.SaveFirewallSnapshotAsync(firewallBaselineSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(firewallStore, session.Id, TrackingSessionStatus.BaselineCaptured).ConfigureAwait(true);
 
         firewallComparison = null;
         firewallRollbackPlan = null;
         FirewallChanges.Clear();
         FirewallRollbackOperations.Clear();
         Status = $"Baseline captured: {firewallBaselineSnapshot.Rules.Count} firewall rules. Warnings: {firewallBaselineSnapshot.Warnings.Count}.";
+        await RefreshSessionHistoryAsync(session.Id, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1410,6 +1626,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Comparison",
             CancellationToken.None).ConfigureAwait(true);
         await firewallStore.SaveFirewallSnapshotAsync(comparisonSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(firewallStore, firewallBaselineSnapshot.SessionId, TrackingSessionStatus.ComparisonCaptured).ConfigureAwait(true);
 
         firewallComparison = firewallComparer.Compare(firewallBaselineSnapshot, comparisonSnapshot, clock.UtcNow);
         FirewallChanges.Clear();
@@ -1419,6 +1636,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         Status = $"Comparison complete: {firewallComparison.Changes.Count} firewall changes.";
+        await RefreshSessionHistoryAsync(firewallBaselineSnapshot.SessionId, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1497,12 +1715,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Baseline",
             CancellationToken.None).ConfigureAwait(true);
         await installedApplicationStore.SaveInstalledApplicationsSnapshotAsync(installedApplicationBaselineSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(installedApplicationStore, session.Id, TrackingSessionStatus.BaselineCaptured).ConfigureAwait(true);
 
         installedApplicationComparison = null;
         installedApplicationRollbackPlan = null;
         InstalledApplicationChanges.Clear();
         InstalledApplicationRollbackWarnings.Clear();
         Status = $"Baseline captured: {installedApplicationBaselineSnapshot.Applications.Count} installed applications. Warnings: {installedApplicationBaselineSnapshot.Warnings.Count}.";
+        await RefreshSessionHistoryAsync(session.Id, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1519,6 +1739,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             "Comparison",
             CancellationToken.None).ConfigureAwait(true);
         await installedApplicationStore.SaveInstalledApplicationsSnapshotAsync(comparisonSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(installedApplicationStore, installedApplicationBaselineSnapshot.SessionId, TrackingSessionStatus.ComparisonCaptured).ConfigureAwait(true);
 
         installedApplicationComparison = installedApplicationComparer.Compare(installedApplicationBaselineSnapshot, comparisonSnapshot, clock.UtcNow);
         InstalledApplicationChanges.Clear();
@@ -1528,6 +1749,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         Status = $"Comparison complete: {installedApplicationComparison.Changes.Count} installed application changes.";
+        await RefreshSessionHistoryAsync(installedApplicationBaselineSnapshot.SessionId, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1576,12 +1798,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             CreateFileSystemOptions(),
             CancellationToken.None).ConfigureAwait(true);
         await fileSystemStore.SaveFileSystemSnapshotAsync(fileSystemBaselineSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(fileSystemStore, session.Id, TrackingSessionStatus.BaselineCaptured).ConfigureAwait(true);
 
         fileSystemComparison = null;
         fileSystemRollbackPlan = null;
         FileSystemChanges.Clear();
         FileSystemRollbackOperations.Clear();
         Status = $"Baseline captured: {fileSystemBaselineSnapshot.Entries.Count} file-system entries. Warnings: {fileSystemBaselineSnapshot.Warnings.Count}.";
+        await RefreshSessionHistoryAsync(session.Id, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1599,6 +1823,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             fileSystemBaselineSnapshot.Options,
             CancellationToken.None).ConfigureAwait(true);
         await fileSystemStore.SaveFileSystemSnapshotAsync(comparisonSnapshot, CancellationToken.None).ConfigureAwait(true);
+        await UpdateSessionStatusAsync(fileSystemStore, fileSystemBaselineSnapshot.SessionId, TrackingSessionStatus.ComparisonCaptured).ConfigureAwait(true);
 
         fileSystemComparison = fileSystemComparer.Compare(fileSystemBaselineSnapshot, comparisonSnapshot, clock.UtcNow);
         FileSystemChanges.Clear();
@@ -1608,6 +1833,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         }
 
         Status = $"Comparison complete: {fileSystemComparison.Changes.Count} file-system changes.";
+        await RefreshSessionHistoryAsync(fileSystemBaselineSnapshot.SessionId, updateStatus: false).ConfigureAwait(true);
         RefreshCommands();
     }
 
@@ -1760,6 +1986,20 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             HashUserSid(),
             IsAdministrator(),
             TrackingSessionStatus.Created);
+    }
+
+    private static async Task UpdateSessionStatusAsync(
+        ITrackingSessionStore store,
+        Guid sessionId,
+        TrackingSessionStatus status)
+    {
+        var session = await store.GetSessionAsync(sessionId, CancellationToken.None).ConfigureAwait(true);
+        if (session is null)
+        {
+            return;
+        }
+
+        await store.SaveSessionAsync(session with { Status = status }, CancellationToken.None).ConfigureAwait(true);
     }
 
     private static string HashUserSid()

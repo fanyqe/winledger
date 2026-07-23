@@ -126,6 +126,7 @@ public partial class App : Application
             .AddSingleton<InstalledApplicationReportExporter>()
             .AddSingleton<FileSystemReportExporter>()
             .AddSingleton<TrackingSessionCaptureOrchestrator>()
+            .AddSingleton<TrackingSessionReopenService>()
             .AddTransient<MainWindowViewModel>()
             .AddTransient<MainWindow>()
             .BuildServiceProvider();

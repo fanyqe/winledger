@@ -14,6 +14,26 @@
         </Grid.RowDefinitions>
 
         <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,16">
+            <Border DockPanel.Dock="Right" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Width="560">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Text="Session history" FontWeight="SemiBold" Foreground="#374151" />
+                    <ComboBox Grid.Row="1" Grid.Column="0" ItemsSource="{Binding SessionHistory}" SelectedItem="{Binding SelectedSession, Mode=TwoWay}" DisplayMemberPath="DisplayName" Height="32" Margin="0,6,8,0" />
+                    <Button Grid.Row="1" Grid.Column="1" Command="{Binding RefreshSessionsCommand}" Content="Refresh" Height="32" Padding="12,0" Margin="0,6,8,0" />
+                    <Button Grid.Row="1" Grid.Column="2" Command="{Binding OpenSelectedSessionCommand}" Content="Open" Height="32" Padding="14,0" Margin="0,6,0,0" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Text="{Binding SelectedSession.Id, TargetNullValue='No session selected'}" FontSize="12" Foreground="#6B7280" Margin="0,6,0,0" />
+                </Grid>
+            </Border>
             <StackPanel>
                 <TextBlock Text="WinLedger" FontSize="30" FontWeight="SemiBold" Foreground="#111827" />
                 <TextBlock Text="Git-like change tracking for Windows system modifications." FontSize="14" Foreground="#4B5563" />
