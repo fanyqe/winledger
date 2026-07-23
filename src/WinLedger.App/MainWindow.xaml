@@ -1,0 +1,771 @@
+<Window x:Class="WinLedger.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="WinLedger" Height="800" Width="1180" MinHeight="680" MinWidth="1020"
+        Background="#F6F8FB">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,16">
+            <StackPanel>
+                <TextBlock Text="WinLedger" FontSize="30" FontWeight="SemiBold" Foreground="#111827" />
+                <TextBlock Text="Git-like change tracking for Windows system modifications." FontSize="14" Foreground="#4B5563" />
+            </StackPanel>
+        </DockPanel>
+
+        <TabControl Grid.Row="1">
+            <TabItem Header="Registry">
+                <Grid Margin="0,14,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.1*" />
+                                <ColumnDefinition Width="1.6*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Session title" FontWeight="SemiBold" Foreground="#374151" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="Registry path" FontWeight="SemiBold" Foreground="#374151" />
+
+                            <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding RegistrySessionTitle, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding RegistryPath, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                            <Button Grid.Row="1" Grid.Column="2" Command="{Binding CaptureRegistryBaselineCommand}" Content="Capture Baseline" Height="34" Padding="14,0" Margin="0,6,8,0" />
+                            <Button Grid.Row="1" Grid.Column="3" Command="{Binding CaptureRegistryComparisonCommand}" Content="Finish and Compare" Height="34" Padding="14,0" Margin="0,6,0,0" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Detected registry changes" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <ListView ItemsSource="{Binding RegistryChanges}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Change" Width="130" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Target" Width="360" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Rollback" Width="130" DisplayMemberBinding="{Binding RollbackAvailability}" />
+                                            <GridViewColumn Header="Summary" Width="420" DisplayMemberBinding="{Binding Summary}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Rollback plan" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Top" Command="{Binding CreateRegistryRollbackPlanCommand}" Content="Generate Plan" Height="34" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Bottom" Command="{Binding ExecuteSelectedRegistryRollbackCommand}" Content="Execute Selected" Height="34" Margin="0,10,0,0" />
+                                <ListView ItemsSource="{Binding RegistryRollbackOperations}" SelectedItem="{Binding SelectedRegistryRollbackOperation, Mode=TwoWay}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Operation" Width="150" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Target" Width="280" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Admin" Width="60" DisplayMemberBinding="{Binding RequiresAdministrator}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Grid.Row="2" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding RegistryExportPath, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,0,12,0" />
+                            <Button Grid.Column="1" Command="{Binding ExportRegistryJsonCommand}" Content="Export Report" Height="34" Padding="16,0" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Services">
+                <Grid Margin="0,14,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Session title" FontWeight="SemiBold" Foreground="#374151" />
+
+                            <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding ServiceSessionTitle, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                            <Button Grid.Row="1" Grid.Column="1" Command="{Binding CaptureServiceBaselineCommand}" Content="Capture Baseline" Height="34" Padding="14,0" Margin="0,6,8,0" />
+                            <Button Grid.Row="1" Grid.Column="2" Command="{Binding CaptureServiceComparisonCommand}" Content="Finish and Compare" Height="34" Padding="14,0" Margin="0,6,0,0" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Detected service changes" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <ListView ItemsSource="{Binding ServiceChanges}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Change" Width="170" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Service" Width="220" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Rollback" Width="150" DisplayMemberBinding="{Binding RollbackAvailability}" />
+                                            <GridViewColumn Header="Summary" Width="500" DisplayMemberBinding="{Binding Summary}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Rollback plan" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Top" Command="{Binding CreateServiceRollbackPlanCommand}" Content="Generate Plan" Height="34" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Bottom" Command="{Binding ExecuteSelectedServiceRollbackCommand}" Content="Execute Selected" Height="34" Margin="0,10,0,0" />
+                                <ListView ItemsSource="{Binding ServiceRollbackOperations}" SelectedItem="{Binding SelectedServiceRollbackOperation, Mode=TwoWay}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Operation" Width="180" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Service" Width="180" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Admin" Width="60" DisplayMemberBinding="{Binding RequiresAdministrator}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Grid.Row="2" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding ServiceExportPath, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,0,12,0" />
+                            <Button Grid.Column="1" Command="{Binding ExportServiceJsonCommand}" Content="Export Report" Height="34" Padding="16,0" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Scheduled Tasks">
+                <Grid Margin="0,14,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Session title" FontWeight="SemiBold" Foreground="#374151" />
+
+                            <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding ScheduledTaskSessionTitle, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                            <Button Grid.Row="1" Grid.Column="1" Command="{Binding CaptureScheduledTaskBaselineCommand}" Content="Capture Baseline" Height="34" Padding="14,0" Margin="0,6,8,0" />
+                            <Button Grid.Row="1" Grid.Column="2" Command="{Binding CaptureScheduledTaskComparisonCommand}" Content="Finish and Compare" Height="34" Padding="14,0" Margin="0,6,0,0" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Detected scheduled task changes" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <ListView ItemsSource="{Binding ScheduledTaskChanges}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Change" Width="180" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Task" Width="280" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Rollback" Width="150" DisplayMemberBinding="{Binding RollbackAvailability}" />
+                                            <GridViewColumn Header="Summary" Width="470" DisplayMemberBinding="{Binding Summary}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Rollback plan" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Top" Command="{Binding CreateScheduledTaskRollbackPlanCommand}" Content="Generate Plan" Height="34" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Bottom" Command="{Binding ExecuteSelectedScheduledTaskRollbackCommand}" Content="Execute Selected" Height="34" Margin="0,10,0,0" />
+                                <ListView ItemsSource="{Binding ScheduledTaskRollbackOperations}" SelectedItem="{Binding SelectedScheduledTaskRollbackOperation, Mode=TwoWay}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Operation" Width="190" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Task" Width="180" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Admin" Width="60" DisplayMemberBinding="{Binding RequiresAdministrator}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Grid.Row="2" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding ScheduledTaskExportPath, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,0,12,0" />
+                            <Button Grid.Column="1" Command="{Binding ExportScheduledTaskJsonCommand}" Content="Export Report" Height="34" Padding="16,0" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Startup">
+                <Grid Margin="0,14,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Session title" FontWeight="SemiBold" Foreground="#374151" />
+
+                            <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding StartupSessionTitle, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                            <Button Grid.Row="1" Grid.Column="1" Command="{Binding CaptureStartupBaselineCommand}" Content="Capture Baseline" Height="34" Padding="14,0" Margin="0,6,8,0" />
+                            <Button Grid.Row="1" Grid.Column="2" Command="{Binding CaptureStartupComparisonCommand}" Content="Finish and Compare" Height="34" Padding="14,0" Margin="0,6,0,0" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Detected startup changes" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <ListView ItemsSource="{Binding StartupChanges}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Change" Width="160" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Entry" Width="260" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Rollback" Width="150" DisplayMemberBinding="{Binding RollbackAvailability}" />
+                                            <GridViewColumn Header="Summary" Width="520" DisplayMemberBinding="{Binding Summary}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Rollback plan" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Top" Command="{Binding CreateStartupRollbackPlanCommand}" Content="Generate Plan" Height="34" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Bottom" Command="{Binding ExecuteSelectedStartupRollbackCommand}" Content="Execute Selected" Height="34" Margin="0,10,0,0" />
+                                <ListView ItemsSource="{Binding StartupRollbackOperations}" SelectedItem="{Binding SelectedStartupRollbackOperation, Mode=TwoWay}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Operation" Width="210" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Entry" Width="180" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Admin" Width="60" DisplayMemberBinding="{Binding RequiresAdministrator}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Grid.Row="2" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding StartupExportPath, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,0,12,0" />
+                            <Button Grid.Column="1" Command="{Binding ExportStartupJsonCommand}" Content="Export Report" Height="34" Padding="16,0" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Environment">
+                <Grid Margin="0,14,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Session title" FontWeight="SemiBold" Foreground="#374151" />
+
+                            <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding EnvironmentSessionTitle, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                            <Button Grid.Row="1" Grid.Column="1" Command="{Binding CaptureEnvironmentBaselineCommand}" Content="Capture Baseline" Height="34" Padding="14,0" Margin="0,6,8,0" />
+                            <Button Grid.Row="1" Grid.Column="2" Command="{Binding CaptureEnvironmentComparisonCommand}" Content="Finish and Compare" Height="34" Padding="14,0" Margin="0,6,0,0" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Detected environment changes" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <ListView ItemsSource="{Binding EnvironmentChanges}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Change" Width="170" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Variable" Width="230" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Rollback" Width="150" DisplayMemberBinding="{Binding RollbackAvailability}" />
+                                            <GridViewColumn Header="Summary" Width="520" DisplayMemberBinding="{Binding Summary}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Rollback plan" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Top" Command="{Binding CreateEnvironmentRollbackPlanCommand}" Content="Generate Plan" Height="34" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Bottom" Command="{Binding ExecuteSelectedEnvironmentRollbackCommand}" Content="Execute Selected" Height="34" Margin="0,10,0,0" />
+                                <ListView ItemsSource="{Binding EnvironmentRollbackOperations}" SelectedItem="{Binding SelectedEnvironmentRollbackOperation, Mode=TwoWay}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Operation" Width="210" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Variable" Width="180" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Admin" Width="60" DisplayMemberBinding="{Binding RequiresAdministrator}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Grid.Row="2" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding EnvironmentExportPath, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,0,12,0" />
+                            <Button Grid.Column="1" Command="{Binding ExportEnvironmentJsonCommand}" Content="Export Report" Height="34" Padding="16,0" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Hosts File">
+                <Grid Margin="0,14,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Session title" FontWeight="SemiBold" Foreground="#374151" />
+
+                            <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding HostsFileSessionTitle, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                            <Button Grid.Row="1" Grid.Column="1" Command="{Binding CaptureHostsFileBaselineCommand}" Content="Capture Baseline" Height="34" Padding="14,0" Margin="0,6,8,0" />
+                            <Button Grid.Row="1" Grid.Column="2" Command="{Binding CaptureHostsFileComparisonCommand}" Content="Finish and Compare" Height="34" Padding="14,0" Margin="0,6,0,0" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Detected hosts file changes" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <ListView ItemsSource="{Binding HostsFileChanges}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Change" Width="150" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Target" Width="300" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Rollback" Width="150" DisplayMemberBinding="{Binding RollbackAvailability}" />
+                                            <GridViewColumn Header="Summary" Width="470" DisplayMemberBinding="{Binding Summary}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Rollback plan" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Top" Command="{Binding CreateHostsFileRollbackPlanCommand}" Content="Generate Plan" Height="34" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Bottom" Command="{Binding ExecuteSelectedHostsFileRollbackCommand}" Content="Execute Selected" Height="34" Margin="0,10,0,0" />
+                                <ListView ItemsSource="{Binding HostsFileRollbackOperations}" SelectedItem="{Binding SelectedHostsFileRollbackOperation, Mode=TwoWay}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Operation" Width="210" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Target" Width="180" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Admin" Width="60" DisplayMemberBinding="{Binding RequiresAdministrator}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Grid.Row="2" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding HostsFileExportPath, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,0,12,0" />
+                            <Button Grid.Column="1" Command="{Binding ExportHostsFileJsonCommand}" Content="Export Report" Height="34" Padding="16,0" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Firewall">
+                <Grid Margin="0,14,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Session title" FontWeight="SemiBold" Foreground="#374151" />
+
+                            <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding FirewallSessionTitle, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                            <Button Grid.Row="1" Grid.Column="1" Command="{Binding CaptureFirewallBaselineCommand}" Content="Capture Baseline" Height="34" Padding="14,0" Margin="0,6,8,0" />
+                            <Button Grid.Row="1" Grid.Column="2" Command="{Binding CaptureFirewallComparisonCommand}" Content="Finish and Compare" Height="34" Padding="14,0" Margin="0,6,0,0" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Detected firewall changes" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <ListView ItemsSource="{Binding FirewallChanges}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Change" Width="170" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Rule" Width="260" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Rollback" Width="150" DisplayMemberBinding="{Binding RollbackAvailability}" />
+                                            <GridViewColumn Header="Summary" Width="500" DisplayMemberBinding="{Binding Summary}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Rollback plan" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Top" Command="{Binding CreateFirewallRollbackPlanCommand}" Content="Generate Plan" Height="34" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Bottom" Command="{Binding ExecuteSelectedFirewallRollbackCommand}" Content="Execute Selected" Height="34" Margin="0,10,0,0" />
+                                <ListView ItemsSource="{Binding FirewallRollbackOperations}" SelectedItem="{Binding SelectedFirewallRollbackOperation, Mode=TwoWay}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Operation" Width="210" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Rule" Width="180" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Admin" Width="60" DisplayMemberBinding="{Binding RequiresAdministrator}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Grid.Row="2" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding FirewallExportPath, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,0,12,0" />
+                            <Button Grid.Column="1" Command="{Binding ExportFirewallJsonCommand}" Content="Export Report" Height="34" Padding="16,0" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Installed Apps &amp; Packages">
+                <Grid Margin="0,14,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Session title" FontWeight="SemiBold" Foreground="#374151" />
+
+                            <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding InstalledApplicationsSessionTitle, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                            <Button Grid.Row="1" Grid.Column="1" Command="{Binding CaptureInstalledApplicationsBaselineCommand}" Content="Capture Baseline" Height="34" Padding="14,0" Margin="0,6,8,0" />
+                            <Button Grid.Row="1" Grid.Column="2" Command="{Binding CaptureInstalledApplicationsComparisonCommand}" Content="Finish and Compare" Height="34" Padding="14,0" Margin="0,6,0,0" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Detected installed application and package changes" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <ListView ItemsSource="{Binding InstalledApplicationChanges}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Change" Width="190" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Source" Width="120" DisplayMemberBinding="{Binding Source}" />
+                                            <GridViewColumn Header="Application" Width="240" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                            <GridViewColumn Header="Rollback" Width="150" DisplayMemberBinding="{Binding RollbackAvailability}" />
+                                            <GridViewColumn Header="Summary" Width="430" DisplayMemberBinding="{Binding Summary}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Review notes" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Top" Command="{Binding CreateInstalledApplicationsRollbackPlanCommand}" Content="Generate Plan" Height="34" Margin="0,0,0,10" />
+                                <ListView ItemsSource="{Binding InstalledApplicationRollbackWarnings}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Warning" Width="360" DisplayMemberBinding="{Binding}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Grid.Row="2" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding InstalledApplicationsExportPath, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,0,12,0" />
+                            <Button Grid.Column="1" Command="{Binding ExportInstalledApplicationsJsonCommand}" Content="Export Report" Height="34" Padding="16,0" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Files">
+                <Grid Margin="0,14,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="1.6*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Session title" FontWeight="SemiBold" Foreground="#374151" />
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="Root path" FontWeight="SemiBold" Foreground="#374151" />
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Backup limit" FontWeight="SemiBold" Foreground="#374151" Margin="0,0,8,0" />
+
+                            <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding FileSystemSessionTitle, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding FileSystemRootPath, UpdateSourceTrigger=PropertyChanged}" Height="34" Margin="0,6,12,0" />
+                            <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding FileSystemBackupSizeLimitText, UpdateSourceTrigger=PropertyChanged}" Width="110" Height="34" Margin="0,6,8,0" />
+                            <Button Grid.Row="1" Grid.Column="3" Command="{Binding CaptureFileSystemBaselineCommand}" Content="Capture Baseline" Height="34" Padding="14,0" Margin="0,6,8,0" />
+
+                            <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,10,0,0">
+                                <CheckBox Content="Hash files" IsChecked="{Binding FileSystemCalculateHashes}" Margin="0,0,18,0" VerticalAlignment="Center" />
+                                <CheckBox Content="Backup small files" IsChecked="{Binding FileSystemBackupSmallFiles}" Margin="0,0,18,0" VerticalAlignment="Center" />
+                                <CheckBox Content="Include noisy paths" IsChecked="{Binding FileSystemIncludeNoise}" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <Button Grid.Row="2" Grid.Column="3" Command="{Binding CaptureFileSystemComparisonCommand}" Content="Finish and Compare" Height="34" Padding="14,0" Margin="0,6,0,0" />
+                        </Grid>
+                    </Border>
+
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="1*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,12,0">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Detected file-system changes" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <ListView ItemsSource="{Binding FileSystemChanges}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Change" Width="120" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Type" Width="90" DisplayMemberBinding="{Binding EntryKind}" />
+                                            <GridViewColumn Header="Rollback" Width="150" DisplayMemberBinding="{Binding RollbackAvailability}" />
+                                            <GridViewColumn Header="Path" Width="520" DisplayMemberBinding="{Binding TargetDisplayName}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Rollback plan" FontSize="16" FontWeight="SemiBold" Foreground="#111827" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Top" Command="{Binding CreateFileSystemRollbackPlanCommand}" Content="Generate Plan" Height="34" Margin="0,0,0,10" />
+                                <Button DockPanel.Dock="Bottom" Command="{Binding ExecuteSelectedFileSystemRollbackCommand}" Content="Execute Selected" Height="34" Margin="0,10,0,0" />
+                                <ListView ItemsSource="{Binding FileSystemRollbackOperations}" SelectedItem="{Binding SelectedFileSystemRollbackOperation, Mode=TwoWay}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="Operation" Width="190" DisplayMemberBinding="{Binding Kind}" />
+                                            <GridViewColumn Header="Type" Width="70" DisplayMemberBinding="{Binding EntryKind}" />
+                                            <GridViewColumn Header="Admin" Width="60" DisplayMemberBinding="{Binding RequiresAdministrator}" />
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </DockPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Grid.Row="2" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" Text="{Binding FileSystemExportPath, UpdateSourceTrigger=PropertyChanged}" Height="30" Margin="0,0,12,0" />
+                            <Button Grid.Column="1" Command="{Binding ExportFileSystemJsonCommand}" Content="Export Report" Height="34" Padding="16,0" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <Border Grid.Row="2" Background="White" BorderBrush="#D9E0EA" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,16,0,0">
+            <TextBlock Text="{Binding Status}" Foreground="#374151" />
+        </Border>
+    </Grid>
+</Window>
