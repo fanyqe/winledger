@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
+using WinLedger.Core.Sessions;
 using WinLedger.Domain;
 using WinLedger.Domain.EnvironmentVariables;
 using WinLedger.Domain.FileSystem;
@@ -99,7 +100,13 @@ public sealed class SqliteWinLedgerStoreTests
             InstalledApplicationTestData.AppxPackage("Example Package"));
         var fileSystemSnapshot = FileSystemTestData.Snapshot(
             session.Id,
-            FileSystemTestData.File("created.txt", hasRollbackData: true, content: "file"));
+            FileSystemTestData.File("created.txt", hasRollbackData: true, content: "file")) with
+        {
+            ChangeJournalStates =
+            [
+                new FileSystemChangeJournalState(@"C:\", "NTFS", true, 123, 1, 10, 1, 100, null)
+            ]
+        };
 
         await store.SaveSessionAsync(olderSession, CancellationToken.None);
         await store.SaveSessionAsync(session, CancellationToken.None);
@@ -154,6 +161,34 @@ public sealed class SqliteWinLedgerStoreTests
         Assert.Equal("created.txt", loadedFileSystemSnapshot?.Entries[0].RelativePath);
         Assert.Equal(FileSystemEntryKind.File, loadedFileSystemSnapshot?.Entries[0].Kind);
         Assert.True(loadedFileSystemSnapshot?.Entries[0].HasRollbackData);
+        Assert.Equal((ulong)123, loadedFileSystemSnapshot?.ChangeJournalStates[0].JournalId);
+    }
+
+    [Fact]
+    public async Task CommitCaptureAsyncRollsBackSessionAndSnapshotsTogether()
+    {
+        var databasePath = CreateDatabasePath();
+        var store = new SqliteWinLedgerStore(databasePath);
+        await store.InitializeAsync(CancellationToken.None);
+
+        var session = Session("Atomic capture session", DateTimeOffset.UtcNow);
+        await store.SaveSessionAsync(session, CancellationToken.None);
+
+        var validSnapshot = RegistrySnapshot.Empty(session.Id, "Registry", DateTimeOffset.UtcNow);
+        var mismatchedSnapshot = ServiceSnapshot.Empty(Guid.NewGuid(), "Services", DateTimeOffset.UtcNow);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => store.CommitCaptureAsync(
+            session with { Status = TrackingSessionStatus.BaselineCaptured },
+            [
+                new TrackingSessionSnapshotCommit(TrackingSubsystemKind.Registry, validSnapshot),
+                new TrackingSessionSnapshotCommit(TrackingSubsystemKind.Services, mismatchedSnapshot)
+            ],
+            CancellationToken.None));
+
+        Assert.Null(await store.GetRegistrySnapshotAsync(validSnapshot.Id, CancellationToken.None));
+
+        var loadedSession = await store.GetSessionAsync(session.Id, CancellationToken.None);
+        Assert.Equal(TrackingSessionStatus.Created, loadedSession?.Status);
     }
 
     [Fact]

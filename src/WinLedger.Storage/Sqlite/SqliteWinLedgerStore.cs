@@ -24,7 +24,7 @@ using WinLedger.Domain.Startup;
 
 namespace WinLedger.Storage.Sqlite;
 
-public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSessionStore, IRegistrySnapshotStore, IServiceSnapshotStore, IScheduledTaskSnapshotStore, IStartupSnapshotStore, IEnvironmentSnapshotStore, IHostsFileSnapshotStore, IFirewallSnapshotStore, IInstalledApplicationSnapshotStore, IFileSystemSnapshotStore
+public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSessionStore, IRegistrySnapshotStore, IServiceSnapshotStore, IScheduledTaskSnapshotStore, IStartupSnapshotStore, IEnvironmentSnapshotStore, IHostsFileSnapshotStore, IFirewallSnapshotStore, IInstalledApplicationSnapshotStore, IFileSystemSnapshotStore, ITrackingSessionCaptureCommitStore
 {
     private const int SchemaVersion = 9;
 
@@ -153,8 +153,51 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
+        await SaveSessionAsync(connection, null, session, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task CommitCaptureAsync(
+        TrackingSession session,
+        IReadOnlyList<TrackingSessionSnapshotCommit> snapshots,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        using var transaction = connection.BeginTransaction();
+
+        await SaveSessionAsync(connection, transaction, session, cancellationToken).ConfigureAwait(false);
+
+        foreach (var snapshot in snapshots)
+        {
+            var envelope = CreateSnapshotEnvelope(snapshot);
+            if (envelope.SessionId != session.Id)
+            {
+                throw new InvalidOperationException("Snapshot session id does not match the committed tracking session.");
+            }
+
+            await SaveSnapshotAsync(
+                connection,
+                transaction,
+                envelope.TableName,
+                envelope.Id,
+                envelope.SessionId,
+                envelope.Name,
+                envelope.CapturedAt,
+                envelope.PayloadJson,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        transaction.Commit();
+    }
+
+    private static async Task SaveSessionAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        TrackingSession session,
+        CancellationToken cancellationToken)
+    {
         await ExecuteNonQueryAsync(
             connection,
+            transaction,
             """
             INSERT INTO sessions(id, payload_json, created_at_utc, status)
             VALUES ($id, $payload, $createdAtUtc, $status)
@@ -555,10 +598,34 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await SaveSnapshotAsync(
+            connection,
+            null,
+            tableName,
+            snapshotId,
+            sessionId,
+            name,
+            capturedAt,
+            payloadJson,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task SaveSnapshotAsync(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        string tableName,
+        Guid snapshotId,
+        Guid sessionId,
+        string name,
+        DateTimeOffset capturedAt,
+        string payloadJson,
+        CancellationToken cancellationToken)
+    {
         var storedPayload = SqliteSnapshotPayloadProtector.Protect(payloadJson);
 
         await ExecuteNonQueryAsync(
             connection,
+            transaction,
             $"""
             INSERT INTO {tableName}(id, session_id, name, captured_at_utc, payload_json)
             VALUES ($id, $sessionId, $name, $capturedAtUtc, $payload)
@@ -574,6 +641,94 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
             new SqliteParameter("$capturedAtUtc", capturedAt.UtcDateTime.ToString("O")),
             new SqliteParameter("$payload", storedPayload))
             .ConfigureAwait(false);
+    }
+
+    private static SnapshotEnvelope CreateSnapshotEnvelope(TrackingSessionSnapshotCommit commit)
+    {
+        return commit switch
+        {
+            { Subsystem: TrackingSubsystemKind.Registry, Snapshot: RegistrySnapshot snapshot } => Envelope(
+                "registry_snapshots",
+                snapshot.Id,
+                snapshot.SessionId,
+                snapshot.Name,
+                snapshot.CapturedAt,
+                snapshot),
+            { Subsystem: TrackingSubsystemKind.Services, Snapshot: ServiceSnapshot snapshot } => Envelope(
+                "service_snapshots",
+                snapshot.Id,
+                snapshot.SessionId,
+                snapshot.Name,
+                snapshot.CapturedAt,
+                snapshot),
+            { Subsystem: TrackingSubsystemKind.ScheduledTasks, Snapshot: ScheduledTaskSnapshot snapshot } => Envelope(
+                "scheduled_task_snapshots",
+                snapshot.Id,
+                snapshot.SessionId,
+                snapshot.Name,
+                snapshot.CapturedAt,
+                snapshot),
+            { Subsystem: TrackingSubsystemKind.Startup, Snapshot: StartupSnapshot snapshot } => Envelope(
+                "startup_snapshots",
+                snapshot.Id,
+                snapshot.SessionId,
+                snapshot.Name,
+                snapshot.CapturedAt,
+                snapshot),
+            { Subsystem: TrackingSubsystemKind.EnvironmentVariables, Snapshot: EnvironmentSnapshot snapshot } => Envelope(
+                "environment_snapshots",
+                snapshot.Id,
+                snapshot.SessionId,
+                snapshot.Name,
+                snapshot.CapturedAt,
+                snapshot),
+            { Subsystem: TrackingSubsystemKind.HostsFile, Snapshot: HostsFileSnapshot snapshot } => Envelope(
+                "hosts_file_snapshots",
+                snapshot.Id,
+                snapshot.SessionId,
+                snapshot.Name,
+                snapshot.CapturedAt,
+                snapshot),
+            { Subsystem: TrackingSubsystemKind.Firewall, Snapshot: FirewallSnapshot snapshot } => Envelope(
+                "firewall_snapshots",
+                snapshot.Id,
+                snapshot.SessionId,
+                snapshot.Name,
+                snapshot.CapturedAt,
+                snapshot),
+            { Subsystem: TrackingSubsystemKind.InstalledApplications, Snapshot: InstalledApplicationsSnapshot snapshot } => Envelope(
+                "installed_application_snapshots",
+                snapshot.Id,
+                snapshot.SessionId,
+                snapshot.Name,
+                snapshot.CapturedAt,
+                snapshot),
+            { Subsystem: TrackingSubsystemKind.FileSystem, Snapshot: FileSystemSnapshot snapshot } => Envelope(
+                "file_system_snapshots",
+                snapshot.Id,
+                snapshot.SessionId,
+                snapshot.Name,
+                snapshot.CapturedAt,
+                snapshot),
+            _ => throw new InvalidOperationException($"Unsupported snapshot commit payload for {commit.Subsystem}.")
+        };
+    }
+
+    private static SnapshotEnvelope Envelope<TSnapshot>(
+        string tableName,
+        Guid id,
+        Guid sessionId,
+        string name,
+        DateTimeOffset capturedAt,
+        TSnapshot snapshot)
+    {
+        return new SnapshotEnvelope(
+            tableName,
+            id,
+            sessionId,
+            name,
+            capturedAt,
+            JsonSerializer.Serialize(snapshot, WinLedgerJsonSerializer.Options));
     }
 
     private async Task<TSnapshot?> GetSnapshotAsync<TSnapshot>(
@@ -809,4 +964,12 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
     }
 
     private sealed record SqliteMigration(int Version, string Name, string Sql);
+
+    private sealed record SnapshotEnvelope(
+        string TableName,
+        Guid Id,
+        Guid SessionId,
+        string Name,
+        DateTimeOffset CapturedAt,
+        string PayloadJson);
 }

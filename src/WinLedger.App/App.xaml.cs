@@ -92,6 +92,7 @@ public partial class App : Application
             .AddSingleton<IFirewallSnapshotStore>(provider => provider.GetRequiredService<SqliteWinLedgerStore>())
             .AddSingleton<IInstalledApplicationSnapshotStore>(provider => provider.GetRequiredService<SqliteWinLedgerStore>())
             .AddSingleton<IFileSystemSnapshotStore>(provider => provider.GetRequiredService<SqliteWinLedgerStore>())
+            .AddSingleton<ITrackingSessionCaptureCommitStore>(provider => provider.GetRequiredService<SqliteWinLedgerStore>())
             .AddSingleton<RegistrySnapshotComparer>()
             .AddSingleton<ServiceSnapshotComparer>()
             .AddSingleton<ScheduledTaskSnapshotComparer>()

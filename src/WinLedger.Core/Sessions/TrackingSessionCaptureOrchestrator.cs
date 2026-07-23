@@ -39,7 +39,8 @@ public sealed class TrackingSessionCaptureOrchestrator(
     IInstalledApplicationSnapshotCollector installedApplicationCollector,
     IInstalledApplicationSnapshotStore installedApplicationStore,
     IFileSystemSnapshotCollector fileSystemCollector,
-    IFileSystemSnapshotStore fileSystemStore)
+    IFileSystemSnapshotStore fileSystemStore,
+    ITrackingSessionCaptureCommitStore? captureCommitStore = null)
 {
     public async Task<TrackingSessionCaptureResult> CaptureAsync(
         TrackingSessionCaptureRequest request,
@@ -54,7 +55,7 @@ public sealed class TrackingSessionCaptureOrchestrator(
         var session = await sessionStore.GetSessionAsync(request.SessionId, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException($"Session was not found: {request.SessionId}");
 
-        var summaries = new List<TrackingSnapshotCaptureSummary>(subsystemPlan.Count);
+        var capturedSnapshots = new List<CapturedSubsystemSnapshot>(subsystemPlan.Count);
         var completedSubsystems = 0;
 
         try
@@ -69,9 +70,9 @@ public sealed class TrackingSessionCaptureOrchestrator(
                     subsystemPlan.Count,
                     "Starting"));
 
-                var summary = await CaptureSubsystemAsync(session.Id, request, subsystem, cancellationToken)
+                var captured = await CaptureSubsystemAsync(session.Id, request, subsystem, cancellationToken)
                     .ConfigureAwait(false);
-                summaries.Add(summary);
+                capturedSnapshots.Add(captured);
                 completedSubsystems++;
 
                 progress?.Report(new TrackingSessionCaptureProgress(
@@ -83,9 +84,12 @@ public sealed class TrackingSessionCaptureOrchestrator(
             }
 
             var updatedSession = session with { Status = StatusForCompletedStage(request.Stage) };
-            await sessionStore.SaveSessionAsync(updatedSession, cancellationToken).ConfigureAwait(false);
+            await CommitCapturedSnapshotsAsync(updatedSession, capturedSnapshots, cancellationToken).ConfigureAwait(false);
 
-            return new TrackingSessionCaptureResult(updatedSession, request.Stage, summaries);
+            return new TrackingSessionCaptureResult(
+                updatedSession,
+                request.Stage,
+                capturedSnapshots.Select(snapshot => snapshot.Summary).ToArray());
         }
         catch (OperationCanceledException)
         {
@@ -114,7 +118,7 @@ public sealed class TrackingSessionCaptureOrchestrator(
         }
     }
 
-    private async Task<TrackingSnapshotCaptureSummary> CaptureSubsystemAsync(
+    private async Task<CapturedSubsystemSnapshot> CaptureSubsystemAsync(
         Guid sessionId,
         TrackingSessionCaptureRequest request,
         TrackingSubsystemKind subsystem,
@@ -144,7 +148,7 @@ public sealed class TrackingSessionCaptureOrchestrator(
         };
     }
 
-    private async Task<TrackingSnapshotCaptureSummary> CaptureRegistryAsync(
+    private async Task<CapturedSubsystemSnapshot> CaptureRegistryAsync(
         Guid sessionId,
         TrackingSessionCaptureRequest request,
         CancellationToken cancellationToken)
@@ -153,92 +157,84 @@ public sealed class TrackingSessionCaptureOrchestrator(
             ?? throw new InvalidOperationException("Registry targets are required for registry capture.");
         var snapshot = await registryCollector.CaptureAsync(sessionId, request.SnapshotName, targets, cancellationToken)
             .ConfigureAwait(false);
-        await registryStore.SaveRegistrySnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
-        return Summary(TrackingSubsystemKind.Registry, snapshot, snapshot.Keys.Count, snapshot.Warnings.Count);
+        return Captured(TrackingSubsystemKind.Registry, snapshot, snapshot.Keys.Count, snapshot.Warnings.Count);
     }
 
-    private async Task<TrackingSnapshotCaptureSummary> CaptureServicesAsync(
+    private async Task<CapturedSubsystemSnapshot> CaptureServicesAsync(
         Guid sessionId,
         string snapshotName,
         CancellationToken cancellationToken)
     {
         var snapshot = await serviceCollector.CaptureAsync(sessionId, snapshotName, cancellationToken)
             .ConfigureAwait(false);
-        await serviceStore.SaveServiceSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
-        return Summary(TrackingSubsystemKind.Services, snapshot, snapshot.Services.Count, snapshot.Warnings.Count);
+        return Captured(TrackingSubsystemKind.Services, snapshot, snapshot.Services.Count, snapshot.Warnings.Count);
     }
 
-    private async Task<TrackingSnapshotCaptureSummary> CaptureScheduledTasksAsync(
+    private async Task<CapturedSubsystemSnapshot> CaptureScheduledTasksAsync(
         Guid sessionId,
         string snapshotName,
         CancellationToken cancellationToken)
     {
         var snapshot = await scheduledTaskCollector.CaptureAsync(sessionId, snapshotName, cancellationToken)
             .ConfigureAwait(false);
-        await scheduledTaskStore.SaveScheduledTaskSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
-        return Summary(TrackingSubsystemKind.ScheduledTasks, snapshot, snapshot.Tasks.Count, snapshot.Warnings.Count);
+        return Captured(TrackingSubsystemKind.ScheduledTasks, snapshot, snapshot.Tasks.Count, snapshot.Warnings.Count);
     }
 
-    private async Task<TrackingSnapshotCaptureSummary> CaptureStartupAsync(
+    private async Task<CapturedSubsystemSnapshot> CaptureStartupAsync(
         Guid sessionId,
         string snapshotName,
         CancellationToken cancellationToken)
     {
         var snapshot = await startupCollector.CaptureAsync(sessionId, snapshotName, cancellationToken)
             .ConfigureAwait(false);
-        await startupStore.SaveStartupSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
-        return Summary(TrackingSubsystemKind.Startup, snapshot, snapshot.Entries.Count, snapshot.Warnings.Count);
+        return Captured(TrackingSubsystemKind.Startup, snapshot, snapshot.Entries.Count, snapshot.Warnings.Count);
     }
 
-    private async Task<TrackingSnapshotCaptureSummary> CaptureEnvironmentAsync(
+    private async Task<CapturedSubsystemSnapshot> CaptureEnvironmentAsync(
         Guid sessionId,
         string snapshotName,
         CancellationToken cancellationToken)
     {
         var snapshot = await environmentCollector.CaptureAsync(sessionId, snapshotName, cancellationToken)
             .ConfigureAwait(false);
-        await environmentStore.SaveEnvironmentSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
-        return Summary(TrackingSubsystemKind.EnvironmentVariables, snapshot, snapshot.Variables.Count, snapshot.Warnings.Count);
+        return Captured(TrackingSubsystemKind.EnvironmentVariables, snapshot, snapshot.Variables.Count, snapshot.Warnings.Count);
     }
 
-    private async Task<TrackingSnapshotCaptureSummary> CaptureHostsFileAsync(
+    private async Task<CapturedSubsystemSnapshot> CaptureHostsFileAsync(
         Guid sessionId,
         string snapshotName,
         CancellationToken cancellationToken)
     {
         var snapshot = await hostsFileCollector.CaptureAsync(sessionId, snapshotName, cancellationToken)
             .ConfigureAwait(false);
-        await hostsFileStore.SaveHostsFileSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
-        return Summary(TrackingSubsystemKind.HostsFile, snapshot, snapshot.Lines.Count, snapshot.Warnings.Count);
+        return Captured(TrackingSubsystemKind.HostsFile, snapshot, snapshot.Lines.Count, snapshot.Warnings.Count);
     }
 
-    private async Task<TrackingSnapshotCaptureSummary> CaptureFirewallAsync(
+    private async Task<CapturedSubsystemSnapshot> CaptureFirewallAsync(
         Guid sessionId,
         string snapshotName,
         CancellationToken cancellationToken)
     {
         var snapshot = await firewallCollector.CaptureAsync(sessionId, snapshotName, cancellationToken)
             .ConfigureAwait(false);
-        await firewallStore.SaveFirewallSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
-        return Summary(TrackingSubsystemKind.Firewall, snapshot, snapshot.Rules.Count, snapshot.Warnings.Count);
+        return Captured(TrackingSubsystemKind.Firewall, snapshot, snapshot.Rules.Count, snapshot.Warnings.Count);
     }
 
-    private async Task<TrackingSnapshotCaptureSummary> CaptureInstalledApplicationsAsync(
+    private async Task<CapturedSubsystemSnapshot> CaptureInstalledApplicationsAsync(
         Guid sessionId,
         string snapshotName,
         CancellationToken cancellationToken)
     {
         var snapshot = await installedApplicationCollector.CaptureAsync(sessionId, snapshotName, cancellationToken)
             .ConfigureAwait(false);
-        await installedApplicationStore.SaveInstalledApplicationsSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
-        return Summary(
+        return Captured(
             TrackingSubsystemKind.InstalledApplications,
             snapshot,
             snapshot.Applications.Count,
             snapshot.Warnings.Count);
     }
 
-    private async Task<TrackingSnapshotCaptureSummary> CaptureFileSystemAsync(
+    private async Task<CapturedSubsystemSnapshot> CaptureFileSystemAsync(
         Guid sessionId,
         TrackingSessionCaptureRequest request,
         CancellationToken cancellationToken)
@@ -247,8 +243,67 @@ public sealed class TrackingSessionCaptureOrchestrator(
             ?? throw new InvalidOperationException("File system options are required for file-system capture.");
         var snapshot = await fileSystemCollector.CaptureAsync(sessionId, request.SnapshotName, options, cancellationToken)
             .ConfigureAwait(false);
-        await fileSystemStore.SaveFileSystemSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
-        return Summary(TrackingSubsystemKind.FileSystem, snapshot, snapshot.Entries.Count, snapshot.Warnings.Count);
+        return Captured(TrackingSubsystemKind.FileSystem, snapshot, snapshot.Entries.Count, snapshot.Warnings.Count);
+    }
+
+    private async Task CommitCapturedSnapshotsAsync(
+        TrackingSession updatedSession,
+        IReadOnlyList<CapturedSubsystemSnapshot> capturedSnapshots,
+        CancellationToken cancellationToken)
+    {
+        if (captureCommitStore is not null)
+        {
+            await captureCommitStore.CommitCaptureAsync(
+                updatedSession,
+                capturedSnapshots.Select(snapshot => snapshot.Commit).ToArray(),
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var snapshot in capturedSnapshots)
+        {
+            await SaveCapturedSnapshotAsync(snapshot.Commit, cancellationToken).ConfigureAwait(false);
+        }
+
+        await sessionStore.SaveSessionAsync(updatedSession, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task SaveCapturedSnapshotAsync(
+        TrackingSessionSnapshotCommit commit,
+        CancellationToken cancellationToken)
+    {
+        switch (commit.Subsystem, commit.Snapshot)
+        {
+            case (TrackingSubsystemKind.Registry, RegistrySnapshot snapshot):
+                await registryStore.SaveRegistrySnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                break;
+            case (TrackingSubsystemKind.Services, ServiceSnapshot snapshot):
+                await serviceStore.SaveServiceSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                break;
+            case (TrackingSubsystemKind.ScheduledTasks, ScheduledTaskSnapshot snapshot):
+                await scheduledTaskStore.SaveScheduledTaskSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                break;
+            case (TrackingSubsystemKind.Startup, StartupSnapshot snapshot):
+                await startupStore.SaveStartupSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                break;
+            case (TrackingSubsystemKind.EnvironmentVariables, EnvironmentSnapshot snapshot):
+                await environmentStore.SaveEnvironmentSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                break;
+            case (TrackingSubsystemKind.HostsFile, HostsFileSnapshot snapshot):
+                await hostsFileStore.SaveHostsFileSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                break;
+            case (TrackingSubsystemKind.Firewall, FirewallSnapshot snapshot):
+                await firewallStore.SaveFirewallSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                break;
+            case (TrackingSubsystemKind.InstalledApplications, InstalledApplicationsSnapshot snapshot):
+                await installedApplicationStore.SaveInstalledApplicationsSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                break;
+            case (TrackingSubsystemKind.FileSystem, FileSystemSnapshot snapshot):
+                await fileSystemStore.SaveFileSystemSnapshotAsync(snapshot, cancellationToken).ConfigureAwait(false);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported snapshot commit payload for {commit.Subsystem}.");
+        }
     }
 
     private ITrackingSessionStore StoreFor(TrackingSubsystemKind subsystem)
@@ -335,84 +390,102 @@ public sealed class TrackingSessionCaptureOrchestrator(
         return selected;
     }
 
-    private static TrackingSnapshotCaptureSummary Summary(
+    private static CapturedSubsystemSnapshot Captured(
         TrackingSubsystemKind subsystem,
         RegistrySnapshot snapshot,
         int itemCount,
         int warningCount)
     {
-        return new TrackingSnapshotCaptureSummary(subsystem, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
+        return CreateCapturedSnapshot(subsystem, snapshot, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
     }
 
-    private static TrackingSnapshotCaptureSummary Summary(
+    private static CapturedSubsystemSnapshot Captured(
         TrackingSubsystemKind subsystem,
         ServiceSnapshot snapshot,
         int itemCount,
         int warningCount)
     {
-        return new TrackingSnapshotCaptureSummary(subsystem, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
+        return CreateCapturedSnapshot(subsystem, snapshot, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
     }
 
-    private static TrackingSnapshotCaptureSummary Summary(
+    private static CapturedSubsystemSnapshot Captured(
         TrackingSubsystemKind subsystem,
         ScheduledTaskSnapshot snapshot,
         int itemCount,
         int warningCount)
     {
-        return new TrackingSnapshotCaptureSummary(subsystem, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
+        return CreateCapturedSnapshot(subsystem, snapshot, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
     }
 
-    private static TrackingSnapshotCaptureSummary Summary(
+    private static CapturedSubsystemSnapshot Captured(
         TrackingSubsystemKind subsystem,
         StartupSnapshot snapshot,
         int itemCount,
         int warningCount)
     {
-        return new TrackingSnapshotCaptureSummary(subsystem, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
+        return CreateCapturedSnapshot(subsystem, snapshot, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
     }
 
-    private static TrackingSnapshotCaptureSummary Summary(
+    private static CapturedSubsystemSnapshot Captured(
         TrackingSubsystemKind subsystem,
         EnvironmentSnapshot snapshot,
         int itemCount,
         int warningCount)
     {
-        return new TrackingSnapshotCaptureSummary(subsystem, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
+        return CreateCapturedSnapshot(subsystem, snapshot, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
     }
 
-    private static TrackingSnapshotCaptureSummary Summary(
+    private static CapturedSubsystemSnapshot Captured(
         TrackingSubsystemKind subsystem,
         HostsFileSnapshot snapshot,
         int itemCount,
         int warningCount)
     {
-        return new TrackingSnapshotCaptureSummary(subsystem, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
+        return CreateCapturedSnapshot(subsystem, snapshot, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
     }
 
-    private static TrackingSnapshotCaptureSummary Summary(
+    private static CapturedSubsystemSnapshot Captured(
         TrackingSubsystemKind subsystem,
         FirewallSnapshot snapshot,
         int itemCount,
         int warningCount)
     {
-        return new TrackingSnapshotCaptureSummary(subsystem, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
+        return CreateCapturedSnapshot(subsystem, snapshot, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
     }
 
-    private static TrackingSnapshotCaptureSummary Summary(
+    private static CapturedSubsystemSnapshot Captured(
         TrackingSubsystemKind subsystem,
         InstalledApplicationsSnapshot snapshot,
         int itemCount,
         int warningCount)
     {
-        return new TrackingSnapshotCaptureSummary(subsystem, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
+        return CreateCapturedSnapshot(subsystem, snapshot, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
     }
 
-    private static TrackingSnapshotCaptureSummary Summary(
+    private static CapturedSubsystemSnapshot Captured(
         TrackingSubsystemKind subsystem,
         FileSystemSnapshot snapshot,
         int itemCount,
         int warningCount)
     {
-        return new TrackingSnapshotCaptureSummary(subsystem, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
+        return CreateCapturedSnapshot(subsystem, snapshot, snapshot.Id, snapshot.Name, snapshot.CapturedAt, itemCount, warningCount);
     }
+
+    private static CapturedSubsystemSnapshot CreateCapturedSnapshot(
+        TrackingSubsystemKind subsystem,
+        object snapshot,
+        Guid snapshotId,
+        string snapshotName,
+        DateTimeOffset capturedAt,
+        int itemCount,
+        int warningCount)
+    {
+        return new CapturedSubsystemSnapshot(
+            new TrackingSessionSnapshotCommit(subsystem, snapshot),
+            new TrackingSnapshotCaptureSummary(subsystem, snapshotId, snapshotName, capturedAt, itemCount, warningCount));
+    }
+
+    private sealed record CapturedSubsystemSnapshot(
+        TrackingSessionSnapshotCommit Commit,
+        TrackingSnapshotCaptureSummary Summary);
 }
