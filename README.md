@@ -99,7 +99,14 @@ dotnet run --project src\WinLedger.Cli -- session list .\winledger.db
 dotnet run --project src\WinLedger.Cli -- session show .\winledger.db <session-id>
 ```
 
-The single-token aliases `session-create`, `session-list`, and `session-show` are also available for scripts.
+Clean up old sessions after checking the impact:
+
+```powershell
+dotnet run --project src\WinLedger.Cli -- session cleanup .\winledger.db --older-than-days 30 --keep-newest 10 --dry-run
+dotnet run --project src\WinLedger.Cli -- session cleanup .\winledger.db --older-than-days 30 --keep-newest 10
+```
+
+The single-token aliases `session-create`, `session-list`, `session-show`, and `session-cleanup` are also available for scripts.
 
 Minimal registry flow:
 

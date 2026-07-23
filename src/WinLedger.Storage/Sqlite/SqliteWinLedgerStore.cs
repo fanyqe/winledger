@@ -28,6 +28,19 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
 {
     private const int SchemaVersion = 9;
 
+    private static readonly IReadOnlyList<string> SnapshotTables =
+    [
+        "registry_snapshots",
+        "service_snapshots",
+        "scheduled_task_snapshots",
+        "startup_snapshots",
+        "environment_snapshots",
+        "hosts_file_snapshots",
+        "firewall_snapshots",
+        "installed_application_snapshots",
+        "file_system_snapshots"
+    ];
+
     private static readonly IReadOnlyList<SqliteMigration> Migrations =
     [
         new(
@@ -196,6 +209,114 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
         }
 
         return sessions;
+    }
+
+    public async Task<SqliteSessionCleanupResult> CleanupSessionsAsync(
+        DateTimeOffset cutoffUtc,
+        int keepNewestSessions,
+        bool dryRun,
+        CancellationToken cancellationToken)
+    {
+        if (keepNewestSessions < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(keepNewestSessions), "Newest session keep count cannot be negative.");
+        }
+
+        var normalizedCutoff = cutoffUtc.ToUniversalTime();
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        using var transaction = connection.BeginTransaction();
+
+        await ExecuteNonQueryAsync(
+            connection,
+            transaction,
+            """
+            CREATE TEMP TABLE IF NOT EXISTS session_cleanup_targets (
+                id TEXT PRIMARY KEY
+            );
+            DELETE FROM session_cleanup_targets;
+            """,
+            cancellationToken)
+            .ConfigureAwait(false);
+
+        await ExecuteNonQueryAsync(
+            connection,
+            transaction,
+            """
+            INSERT INTO session_cleanup_targets(id)
+            SELECT id
+            FROM sessions
+            WHERE created_at_utc < $cutoffUtc
+              AND (
+                  $keepNewestSessions <= 0 OR
+                  id NOT IN (
+                      SELECT id
+                      FROM sessions
+                      ORDER BY created_at_utc DESC, id ASC
+                      LIMIT $keepNewestSessions
+                  )
+              );
+            """,
+            cancellationToken,
+            new SqliteParameter("$cutoffUtc", normalizedCutoff.UtcDateTime.ToString("O")),
+            new SqliteParameter("$keepNewestSessions", keepNewestSessions))
+            .ConfigureAwait(false);
+
+        var matchedSessions = await ExecuteScalarIntAsync(
+            connection,
+            transaction,
+            "SELECT COUNT(*) FROM session_cleanup_targets;",
+            cancellationToken)
+            .ConfigureAwait(false);
+        var matchedSnapshotRows = new Dictionary<string, int>(StringComparer.Ordinal);
+        var deletedSnapshotRows = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var table in SnapshotTables)
+        {
+            var matchedRows = await ExecuteScalarIntAsync(
+                connection,
+                transaction,
+                $"SELECT COUNT(*) FROM {table} WHERE session_id IN (SELECT id FROM session_cleanup_targets);",
+                cancellationToken)
+                .ConfigureAwait(false);
+            matchedSnapshotRows[table] = matchedRows;
+            deletedSnapshotRows[table] = 0;
+        }
+
+        var deletedSessions = 0;
+        if (!dryRun)
+        {
+            foreach (var table in SnapshotTables)
+            {
+                deletedSnapshotRows[table] = await ExecuteAffectedRowsAsync(
+                    connection,
+                    transaction,
+                    $"DELETE FROM {table} WHERE session_id IN (SELECT id FROM session_cleanup_targets);",
+                    cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            deletedSessions = await ExecuteAffectedRowsAsync(
+                connection,
+                transaction,
+                "DELETE FROM sessions WHERE id IN (SELECT id FROM session_cleanup_targets);",
+                cancellationToken)
+                .ConfigureAwait(false);
+
+            transaction.Commit();
+        }
+        else
+        {
+            transaction.Rollback();
+        }
+
+        return new SqliteSessionCleanupResult(
+            dryRun,
+            normalizedCutoff,
+            keepNewestSessions,
+            matchedSessions,
+            deletedSessions,
+            matchedSnapshotRows,
+            deletedSnapshotRows);
     }
 
     public Task SaveRegistrySnapshotAsync(RegistrySnapshot snapshot, CancellationToken cancellationToken)
@@ -649,6 +770,35 @@ public sealed class SqliteWinLedgerStore(string databasePath) : ITrackingSession
         command.CommandText = commandText;
         command.Parameters.AddRange(parameters);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<int> ExecuteAffectedRowsAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string commandText,
+        CancellationToken cancellationToken,
+        params SqliteParameter[] parameters)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = commandText;
+        command.Parameters.AddRange(parameters);
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<int> ExecuteScalarIntAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string commandText,
+        CancellationToken cancellationToken,
+        params SqliteParameter[] parameters)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = commandText;
+        command.Parameters.AddRange(parameters);
+        var value = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private sealed record SqliteMigration(int Version, string Name, string Sql);

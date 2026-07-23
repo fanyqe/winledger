@@ -189,6 +189,64 @@ public sealed class SqliteWinLedgerStoreTests
         Assert.Equal(19, exception.SqliteErrorCode);
     }
 
+    [Fact]
+    public async Task CleanupSessionsAsyncDryRunsAndDeletesOldSessionsWithSnapshots()
+    {
+        var databasePath = CreateDatabasePath();
+        var store = new SqliteWinLedgerStore(databasePath);
+        await store.InitializeAsync(CancellationToken.None);
+
+        var deletedSession = Session("Old session to delete", new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var retainedOldSession = Session("Old session to keep", new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero));
+        var retainedNewestSession = Session("Newest session", new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero));
+        await store.SaveSessionAsync(deletedSession, CancellationToken.None);
+        await store.SaveSessionAsync(retainedOldSession, CancellationToken.None);
+        await store.SaveSessionAsync(retainedNewestSession, CancellationToken.None);
+
+        var deletedRegistrySnapshot = RegistrySnapshot.Empty(deletedSession.Id, "Registry", DateTimeOffset.UtcNow);
+        var retainedRegistrySnapshot = RegistrySnapshot.Empty(retainedOldSession.Id, "Registry", DateTimeOffset.UtcNow);
+        var deletedFileSnapshot = FileSystemTestData.Snapshot(
+            deletedSession.Id,
+            FileSystemTestData.File("removed.txt", hasRollbackData: true, content: "removed"));
+        await store.SaveRegistrySnapshotAsync(deletedRegistrySnapshot, CancellationToken.None);
+        await store.SaveRegistrySnapshotAsync(retainedRegistrySnapshot, CancellationToken.None);
+        await store.SaveFileSystemSnapshotAsync(deletedFileSnapshot, CancellationToken.None);
+
+        var cutoff = new DateTimeOffset(2026, 1, 10, 0, 0, 0, TimeSpan.Zero);
+        var dryRun = await store.CleanupSessionsAsync(
+            cutoff,
+            keepNewestSessions: 2,
+            dryRun: true,
+            cancellationToken: CancellationToken.None);
+
+        Assert.True(dryRun.DryRun);
+        Assert.Equal(1, dryRun.MatchedSessions);
+        Assert.Equal(0, dryRun.DeletedSessions);
+        Assert.Equal(1, dryRun.MatchedSnapshotRows["registry_snapshots"]);
+        Assert.Equal(1, dryRun.MatchedSnapshotRows["file_system_snapshots"]);
+        Assert.NotNull(await store.GetSessionAsync(deletedSession.Id, CancellationToken.None));
+        Assert.Single(await store.ListRegistrySnapshotsAsync(deletedSession.Id, CancellationToken.None));
+        Assert.Single(await store.ListFileSystemSnapshotsAsync(deletedSession.Id, CancellationToken.None));
+
+        var cleanup = await store.CleanupSessionsAsync(
+            cutoff,
+            keepNewestSessions: 2,
+            dryRun: false,
+            cancellationToken: CancellationToken.None);
+
+        Assert.False(cleanup.DryRun);
+        Assert.Equal(1, cleanup.MatchedSessions);
+        Assert.Equal(1, cleanup.DeletedSessions);
+        Assert.Equal(1, cleanup.DeletedSnapshotRows["registry_snapshots"]);
+        Assert.Equal(1, cleanup.DeletedSnapshotRows["file_system_snapshots"]);
+        Assert.Null(await store.GetSessionAsync(deletedSession.Id, CancellationToken.None));
+        Assert.Empty(await store.ListRegistrySnapshotsAsync(deletedSession.Id, CancellationToken.None));
+        Assert.Empty(await store.ListFileSystemSnapshotsAsync(deletedSession.Id, CancellationToken.None));
+        Assert.NotNull(await store.GetSessionAsync(retainedOldSession.Id, CancellationToken.None));
+        Assert.NotNull(await store.GetSessionAsync(retainedNewestSession.Id, CancellationToken.None));
+        Assert.Single(await store.ListRegistrySnapshotsAsync(retainedOldSession.Id, CancellationToken.None));
+    }
+
     private static ScheduledTaskDefinitionSnapshot TaskSnapshot(string path, bool enabled)
     {
         return new ScheduledTaskDefinitionSnapshot(
@@ -229,6 +287,20 @@ public sealed class SqliteWinLedgerStoreTests
             EnvironmentVariableValueType.ExpandString,
             value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             @"HKCU\Environment");
+    }
+
+    private static TrackingSession Session(string title, DateTimeOffset createdAt)
+    {
+        return new TrackingSession(
+            Guid.NewGuid(),
+            title,
+            null,
+            createdAt,
+            "Windows",
+            "X64",
+            "redacted",
+            false,
+            TrackingSessionStatus.Created);
     }
 
     private static string CreateDatabasePath()

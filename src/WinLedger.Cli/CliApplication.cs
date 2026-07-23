@@ -46,6 +46,7 @@ internal sealed class CliApplication(IServiceProvider services)
                 "session-show" => await sessionCommands.ShowAsync(args).ConfigureAwait(false),
                 "session-baseline" => await sessionCommands.BaselineAsync(args).ConfigureAwait(false),
                 "session-comparison" => await sessionCommands.ComparisonAsync(args).ConfigureAwait(false),
+                "session-cleanup" => await sessionCommands.CleanupAsync(args).ConfigureAwait(false),
                 "registry-capture" => await CaptureRegistryAsync(args).ConfigureAwait(false),
                 "registry-compare" => await CompareRegistryAsync(args).ConfigureAwait(false),
                 "registry-rollback-apply" => await ApplyRegistryRollbackAsync(args).ConfigureAwait(false),
@@ -351,11 +352,13 @@ internal sealed class CliApplication(IServiceProvider services)
               winledger session show <database> <session-id>
               winledger session baseline <database> <session-id> <snapshot-name> [options]
               winledger session comparison <database> <session-id> <snapshot-name> [options]
+              winledger session cleanup <database> (--older-than-days <days>|--before <utc-iso>) [--keep-newest <count>] [--dry-run]
               winledger session-create <database> <session-title>
               winledger session-list <database>
               winledger session-show <database> <session-id>
               winledger session-baseline <database> <session-id> <snapshot-name> [options]
               winledger session-comparison <database> <session-id> <snapshot-name> [options]
+              winledger session-cleanup <database> (--older-than-days <days>|--before <utc-iso>) [--keep-newest <count>] [--dry-run]
               winledger registry-capture <database> <session-id> <snapshot-name> <registry-path|--sandbox|--profile profile-name> [additional-registry-path...]
               winledger registry-compare <database> <baseline-snapshot-id> <comparison-snapshot-id> <report-output>
               winledger registry-rollback-apply <report-json> <operation-id|all>
@@ -396,6 +399,10 @@ internal sealed class CliApplication(IServiceProvider services)
               --no-hash                            Skip file hashes for faster file-system capture.
               --backup-small-files <bytes>         Store small-file backup content up to the byte limit.
               --include-noise                      Include high-noise file-system paths.
+              --older-than-days <days>             Cleanup sessions older than the given age.
+              --before <utc-iso>                   Cleanup sessions created before the given UTC timestamp.
+              --keep-newest <count>                Keep the newest sessions even if they are older than the cutoff.
+              --dry-run                            Report cleanup counts without deleting records.
 
             Examples:
               winledger session create .\winledger.db "Installing ExampleApp"
@@ -403,6 +410,7 @@ internal sealed class CliApplication(IServiceProvider services)
               winledger session show .\winledger.db <session-id>
               winledger session baseline .\winledger.db <session-id> Baseline --registry-profile installer --files-root .\Sandbox
               winledger session comparison .\winledger.db <session-id> Comparison --registry-profile installer --files-root .\Sandbox
+              winledger session cleanup .\winledger.db --older-than-days 30 --keep-newest 10 --dry-run
               winledger service-capture .\winledger.db <session-id> Baseline
               winledger task-capture .\winledger.db <session-id> Baseline
               winledger startup-capture .\winledger.db <session-id> Baseline
