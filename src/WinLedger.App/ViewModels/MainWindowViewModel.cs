@@ -170,8 +170,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         "WinLedger",
         "FileTrackingSample");
     private string fileSystemBackupSizeLimitText = "262144";
-    private bool fileSystemCalculateHashes;
-    private bool fileSystemBackupSmallFiles;
+    private bool fileSystemCalculateHashes = FileSystemSnapshotOptions.DefaultCalculateHashes;
+    private bool fileSystemBackupSmallFiles = FileSystemSnapshotOptions.DefaultBackupSmallFiles;
     private bool fileSystemIncludeNoise;
     private RegistryTrackingProfile selectedRegistryProfile = DefaultRegistrySnapshotTargets.DefaultProfile;
     private string registryPath = string.Empty;

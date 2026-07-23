@@ -18,7 +18,7 @@ internal sealed class FileSystemCliCommands(IServiceProvider services)
     {
         if (args.Length < 5)
         {
-            Console.Error.WriteLine("Usage: winledger files-capture <database> <session-id> <snapshot-name> <root-path> [--hash] [--backup-small-files <bytes>] [--include-noise]");
+            Console.Error.WriteLine("Usage: winledger files-capture <database> <session-id> <snapshot-name> <root-path> [--hash|--no-hash] [--backup-small-files <bytes>] [--include-noise]");
             return 2;
         }
 
@@ -116,9 +116,9 @@ internal sealed class FileSystemCliCommands(IServiceProvider services)
 
     private static FileSystemSnapshotOptions ParseCaptureOptions(string[] args)
     {
-        var calculateHashes = false;
-        var backupSmallFiles = false;
-        var backupSizeLimitBytes = 0L;
+        var calculateHashes = FileSystemSnapshotOptions.DefaultCalculateHashes;
+        var backupSmallFiles = FileSystemSnapshotOptions.DefaultBackupSmallFiles;
+        var backupSizeLimitBytes = FileSystemSnapshotOptions.DefaultBackupSizeLimitBytes;
         var includeHighNoise = false;
 
         for (var index = 5; index < args.Length; index++)
@@ -127,6 +127,10 @@ internal sealed class FileSystemCliCommands(IServiceProvider services)
             {
                 case "--hash":
                     calculateHashes = true;
+                    break;
+
+                case "--no-hash":
+                    calculateHashes = false;
                     break;
 
                 case "--include-noise":

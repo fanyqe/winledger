@@ -38,4 +38,23 @@ public sealed class SessionCaptureOptionsParserTests
         Assert.Contains(options.RegistryTargets!, target =>
             string.Equals(target.Path.KeyPath, @"Software\WinLedger\Extra", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void ParseEnablesFileHashesByDefault()
+    {
+        var options = SessionCaptureOptionsParser.Parse(["--files-root", @"C:\Sandbox"]);
+
+        Assert.Contains(TrackingSubsystemKind.FileSystem, options.Subsystems);
+        Assert.NotNull(options.FileSystemOptions);
+        Assert.True(options.FileSystemOptions.CalculateHashes);
+    }
+
+    [Fact]
+    public void ParseAllowsDisablingFileHashes()
+    {
+        var options = SessionCaptureOptionsParser.Parse(["--files-root", @"C:\Sandbox", "--no-hash"]);
+
+        Assert.NotNull(options.FileSystemOptions);
+        Assert.False(options.FileSystemOptions.CalculateHashes);
+    }
 }

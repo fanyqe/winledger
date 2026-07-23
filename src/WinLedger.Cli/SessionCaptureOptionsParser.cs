@@ -36,9 +36,9 @@ internal static class SessionCaptureOptionsParser
         var requestedSubsystems = new List<TrackingSubsystemKind>();
         var registryTargets = new List<RegistrySnapshotTarget>();
         var fileRoots = new List<string>();
-        var calculateHashes = false;
-        var backupSmallFiles = false;
-        var backupSizeLimitBytes = 0L;
+        var calculateHashes = FileSystemSnapshotOptions.DefaultCalculateHashes;
+        var backupSmallFiles = FileSystemSnapshotOptions.DefaultBackupSmallFiles;
+        var backupSizeLimitBytes = FileSystemSnapshotOptions.DefaultBackupSizeLimitBytes;
         var includeHighNoise = false;
         var fileOptionUsed = false;
 
@@ -73,6 +73,11 @@ internal static class SessionCaptureOptionsParser
 
                 case "--hash":
                     calculateHashes = true;
+                    fileOptionUsed = true;
+                    break;
+
+                case "--no-hash":
+                    calculateHashes = false;
                     fileOptionUsed = true;
                     break;
 

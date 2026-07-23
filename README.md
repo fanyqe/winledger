@@ -126,7 +126,7 @@ dotnet run --project src\WinLedger.Cli -- environment-capture .\winledger.db <se
 dotnet run --project src\WinLedger.Cli -- hosts-capture .\winledger.db <session-id> Baseline
 dotnet run --project src\WinLedger.Cli -- firewall-capture .\winledger.db <session-id> Baseline
 dotnet run --project src\WinLedger.Cli -- applications-capture .\winledger.db <session-id> Baseline
-dotnet run --project src\WinLedger.Cli -- files-capture .\winledger.db <session-id> Baseline .\Sandbox --hash --backup-small-files 262144
+dotnet run --project src\WinLedger.Cli -- files-capture .\winledger.db <session-id> Baseline .\Sandbox --backup-small-files 262144
 ```
 
 Use `--no-elevation` only for local smoke tests against non-privileged sandbox paths.
@@ -134,6 +134,8 @@ Use `--no-elevation` only for local smoke tests against non-privileged sandbox p
 ## Safety Notes
 
 WinLedger validates the expected current state before applying supported rollback operations. If the machine has changed again since the comparison snapshot, rollback can stop or mark the operation as conflicted instead of blindly mutating the system.
+
+File-system capture calculates SHA-256 hashes by default so rollback validation can detect content changes even when file metadata is not enough. Use `--no-hash` only when a faster scan is more important than content-level validation.
 
 Rollback support is intentionally limited in the alpha:
 
