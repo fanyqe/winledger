@@ -34,6 +34,44 @@
 - Restricted elevated rollback helper process
 - Portable win-x64 release package script and GitHub Actions artifact workflow
 
+## Post-Alpha Priority Backlog
+
+### P0: Product Usability
+
+- Single unified tracking session across all supported subsystems.
+- WPF session history with saved session reopening.
+- One baseline and comparison orchestration flow for every subsystem.
+- Progress reporting, cancellation, and non-blocking background execution.
+- WPF rollback execution through the elevated helper.
+- Helper executable signature or hash verification before privileged execution.
+- Rollback requests bound to the source report hash.
+- Restrictive ACLs and cleanup for helper request and response files.
+- Multi-root registry tracking and ready-made tracking profiles.
+- Real Windows integration tests for supported subsystem flows.
+- Atomic hosts file and backed-up file restore where the platform allows it.
+
+### P1: Reliability And Release Hardening
+
+- Real SQLite migration pipeline instead of create-only schema setup.
+- `PRAGMA foreign_keys = ON` for SQLite connections.
+- DPAPI or per-user protection for sensitive snapshot data.
+- Hash-based file validation by default for supported file rollback operations.
+- NTFS USN Journal-backed file tracking.
+- Local database retention and cleanup controls.
+- Signed release artifacts.
+- SBOM generation and CodeQL scanning.
+- Public issue workflow and triage labels.
+- Correct `REG_NONE` registry value handling.
+
+### P2: Code Health
+
+- Split the large WPF main view model into focused view models and services.
+- Move repeated subsystem capture, compare, export, and rollback flows into shared services.
+- Add a coverage gate for core comparison, storage, and rollback behavior.
+- Add UI-level tests for critical WPF flows.
+- Move helper communication to named pipes or another authenticated handle-based protocol.
+- Coordinate snapshot consistency and transactions across subsystem captures.
+
 ## Later Phases
 
 - Windows package deployment API integration beyond registry-backed AppX/MSIX package registration tracking
