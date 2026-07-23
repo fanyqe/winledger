@@ -200,7 +200,7 @@ public sealed class RegistryReportExporter
             RegistryValueType.DWord => $"dword:{ReadUInt32(value.SerializedValue).ToString("x8", CultureInfo.InvariantCulture)}",
             RegistryValueType.MultiString => $"hex(7):{FormatHex(EncodeMultiString(value.SerializedValue))}",
             RegistryValueType.QWord => $"hex(b):{FormatHex(BitConverter.GetBytes(ReadUInt64(value.SerializedValue)))}",
-            RegistryValueType.None => "hex(0):",
+            RegistryValueType.None => $"hex(0):{FormatHex(Convert.FromBase64String(ReadJsonString(value.SerializedValue)))}",
             _ => string.Empty
         };
 

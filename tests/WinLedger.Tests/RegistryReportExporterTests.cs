@@ -76,7 +76,7 @@ public sealed class RegistryReportExporterTests
                 Operation(RollbackOperationKind.SetRegistryValue, keyPath, "Binary", BinaryValue("Binary", [0x01, 0x2a, 0xff])),
                 Operation(RollbackOperationKind.SetRegistryValue, keyPath, "Dword", Value("Dword", RegistryValueType.DWord, 42L)),
                 Operation(RollbackOperationKind.SetRegistryValue, keyPath, "Qword", Value("Qword", RegistryValueType.QWord, 0x0102030405060708L)),
-                Operation(RollbackOperationKind.SetRegistryValue, keyPath, "None", Value("None", RegistryValueType.None, string.Empty)),
+                Operation(RollbackOperationKind.SetRegistryValue, keyPath, "None", NoneValue("None", [0xde, 0xad])),
                 Operation(RollbackOperationKind.DeleteRegistryValue, keyPath, "DeleteMe", null)
             ],
             ["Manual review warning"]);
@@ -94,7 +94,7 @@ public sealed class RegistryReportExporterTests
         Assert.Contains("\"Binary\"=hex:01,2a,ff", reg, StringComparison.Ordinal);
         Assert.Contains("\"Dword\"=dword:0000002a", reg, StringComparison.Ordinal);
         Assert.Contains("\"Qword\"=hex(b):08,07,06,05,04,03,02,01", reg, StringComparison.Ordinal);
-        Assert.Contains("\"None\"=hex(0):", reg, StringComparison.Ordinal);
+        Assert.Contains("\"None\"=hex(0):de,ad", reg, StringComparison.Ordinal);
         Assert.Contains("\"DeleteMe\"=-", reg, StringComparison.Ordinal);
     }
 
@@ -206,6 +206,15 @@ public sealed class RegistryReportExporterTests
             RegistryValueType.Binary,
             JsonSerializer.Serialize(Convert.ToBase64String(value)),
             $"Binary ({value.Length} bytes)");
+    }
+
+    private static RegistryValueSnapshot NoneValue(string name, byte[] value)
+    {
+        return new RegistryValueSnapshot(
+            name,
+            RegistryValueType.None,
+            JsonSerializer.Serialize(Convert.ToBase64String(value)),
+            $"None ({value.Length} bytes)");
     }
 
     private static RegistryValueSnapshot Value<T>(string name, RegistryValueType type, T value)

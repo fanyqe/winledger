@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Win32;
 using WinLedger.Comparison.Registry;
 using WinLedger.Core.Abstractions;
@@ -53,6 +54,56 @@ public sealed class WindowsRegistryIntegrationTests
             using var restoredKey = Registry.CurrentUser.OpenSubKey(keyPath, writable: false);
             Assert.NotNull(restoredKey);
             Assert.Null(restoredKey.GetValue("Setting", null));
+        }
+        finally
+        {
+            DeleteSandboxKey(keyPath);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "Integration")]
+    public async Task RegistrySnapshotAndMutationPreserveRegNoneBytes()
+    {
+        var sessionId = Guid.NewGuid();
+        var keyPath = $@"{IntegrationRootKeyPath}\{Guid.NewGuid():N}";
+        var registryPath = new RegistryPath(RegistryHiveKind.CurrentUser, keyPath);
+        var rawBytes = new byte[] { 0x01, 0x2a, 0xff };
+
+        DeleteSandboxKey(keyPath);
+        try
+        {
+            using (var key = Registry.CurrentUser.CreateSubKey(keyPath, writable: true))
+            {
+                Assert.NotNull(key);
+                key.SetValue("Raw", rawBytes, RegistryValueKind.None);
+            }
+
+            var collector = new WindowsRegistrySnapshotCollector(new FixedClock());
+            var snapshot = await collector.CaptureAsync(
+                sessionId,
+                "Baseline",
+                [new RegistrySnapshotTarget(registryPath, IncludeSubKeys: false, "REG_NONE sandbox")],
+                CancellationToken.None);
+            var value = Assert.Single(Assert.Single(snapshot.Keys).Values);
+
+            Assert.Equal(RegistryValueType.None, value.ValueType);
+            Assert.Equal(JsonSerializer.Serialize(Convert.ToBase64String(rawBytes)), value.SerializedValue);
+
+            var provider = new WindowsRegistryMutationProvider();
+            await provider.SetValueAsync(
+                registryPath,
+                new RegistryValueSnapshot(
+                    "RestoredRaw",
+                    RegistryValueType.None,
+                    JsonSerializer.Serialize(Convert.ToBase64String(rawBytes)),
+                    "None (3 bytes)"),
+                CancellationToken.None);
+            var restored = await provider.ReadValueAsync(registryPath, "RestoredRaw", CancellationToken.None);
+
+            Assert.NotNull(restored);
+            Assert.Equal(RegistryValueType.None, restored.ValueType);
+            Assert.Equal(JsonSerializer.Serialize(Convert.ToBase64String(rawBytes)), restored.SerializedValue);
         }
         finally
         {
