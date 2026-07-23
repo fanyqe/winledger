@@ -44,6 +44,8 @@ internal sealed class CliApplication(IServiceProvider services)
                 "session-create" => await sessionCommands.CreateAsync(args).ConfigureAwait(false),
                 "session-list" => await sessionCommands.ListAsync(args).ConfigureAwait(false),
                 "session-show" => await sessionCommands.ShowAsync(args).ConfigureAwait(false),
+                "session-baseline" => await sessionCommands.BaselineAsync(args).ConfigureAwait(false),
+                "session-comparison" => await sessionCommands.ComparisonAsync(args).ConfigureAwait(false),
                 "registry-capture" => await CaptureRegistryAsync(args).ConfigureAwait(false),
                 "registry-compare" => await CompareRegistryAsync(args).ConfigureAwait(false),
                 "registry-rollback-apply" => await ApplyRegistryRollbackAsync(args).ConfigureAwait(false),
@@ -320,9 +322,13 @@ internal sealed class CliApplication(IServiceProvider services)
               winledger session create <database> <session-title>
               winledger session list <database>
               winledger session show <database> <session-id>
+              winledger session baseline <database> <session-id> <snapshot-name> [options]
+              winledger session comparison <database> <session-id> <snapshot-name> [options]
               winledger session-create <database> <session-title>
               winledger session-list <database>
               winledger session-show <database> <session-id>
+              winledger session-baseline <database> <session-id> <snapshot-name> [options]
+              winledger session-comparison <database> <session-id> <snapshot-name> [options]
               winledger registry-capture <database> <session-id> <snapshot-name> <registry-path>
               winledger registry-compare <database> <baseline-snapshot-id> <comparison-snapshot-id> <report-output>
               winledger registry-rollback-apply <report-json> <operation-id|all>
@@ -353,10 +359,21 @@ internal sealed class CliApplication(IServiceProvider services)
 
             Report outputs use JSON by default, HTML for .html or .htm, plain text for .txt or .text, and registry rollback .reg or .ps1 for registry reports.
 
+            Session capture options:
+              --subsystems <names>                 Comma-separated list: all, registry, services, tasks, startup, environment, hosts, firewall, applications, files
+              --registry-path <path>               Add a recursive registry target. Can be used more than once.
+              --registry-sandbox                   Capture the built-in sandbox registry targets.
+              --files-root <path>                  Add a monitored file-system root. Can be used more than once.
+              --hash                               Calculate file hashes.
+              --backup-small-files <bytes>         Store small-file backup content up to the byte limit.
+              --include-noise                      Include high-noise file-system paths.
+
             Examples:
               winledger session create .\winledger.db "Installing ExampleApp"
               winledger session list .\winledger.db
               winledger session show .\winledger.db <session-id>
+              winledger session baseline .\winledger.db <session-id> Baseline --registry-sandbox --files-root .\Sandbox --hash
+              winledger session comparison .\winledger.db <session-id> Comparison --registry-sandbox --files-root .\Sandbox --hash
               winledger service-capture .\winledger.db <session-id> Baseline
               winledger task-capture .\winledger.db <session-id> Baseline
               winledger startup-capture .\winledger.db <session-id> Baseline

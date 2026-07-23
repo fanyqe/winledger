@@ -2,6 +2,16 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using Microsoft.Extensions.DependencyInjection;
 using WinLedger.Core.Abstractions;
+using WinLedger.Core.EnvironmentVariables;
+using WinLedger.Core.FileSystem;
+using WinLedger.Core.Firewall;
+using WinLedger.Core.Hosts;
+using WinLedger.Core.InstalledApplications;
+using WinLedger.Core.Registry;
+using WinLedger.Core.ScheduledTasks;
+using WinLedger.Core.Services;
+using WinLedger.Core.Sessions;
+using WinLedger.Core.Startup;
 using WinLedger.Domain.Sessions;
 using WinLedger.Storage.Sqlite;
 
@@ -13,7 +23,7 @@ internal sealed class SessionCliCommands(IServiceProvider services)
     {
         if (args.Length < 2)
         {
-            Console.Error.WriteLine("Usage: winledger session <create|list|show> ...");
+            Console.Error.WriteLine("Usage: winledger session <create|list|show|baseline|comparison> ...");
             return 2;
         }
 
@@ -22,6 +32,8 @@ internal sealed class SessionCliCommands(IServiceProvider services)
             "create" => await CreateGroupedAsync(args).ConfigureAwait(false),
             "list" => await ListGroupedAsync(args).ConfigureAwait(false),
             "show" => await ShowGroupedAsync(args).ConfigureAwait(false),
+            "baseline" => await BaselineGroupedAsync(args).ConfigureAwait(false),
+            "comparison" => await ComparisonGroupedAsync(args).ConfigureAwait(false),
             _ => UnknownSessionCommand(args[1])
         };
     }
@@ -59,6 +71,28 @@ internal sealed class SessionCliCommands(IServiceProvider services)
         return ShowAsync(args[1], args[2]);
     }
 
+    public Task<int> BaselineAsync(string[] args)
+    {
+        if (args.Length < 4)
+        {
+            Console.Error.WriteLine("Usage: winledger session-baseline <database> <session-id> <snapshot-name> [options]");
+            return Task.FromResult(2);
+        }
+
+        return CaptureAsync(args[1], args[2], args[3], TrackingSnapshotStage.Baseline, args.Skip(4).ToArray());
+    }
+
+    public Task<int> ComparisonAsync(string[] args)
+    {
+        if (args.Length < 4)
+        {
+            Console.Error.WriteLine("Usage: winledger session-comparison <database> <session-id> <snapshot-name> [options]");
+            return Task.FromResult(2);
+        }
+
+        return CaptureAsync(args[1], args[2], args[3], TrackingSnapshotStage.Comparison, args.Skip(4).ToArray());
+    }
+
     private Task<int> CreateGroupedAsync(string[] args)
     {
         if (args.Length < 4)
@@ -90,6 +124,28 @@ internal sealed class SessionCliCommands(IServiceProvider services)
         }
 
         return ShowAsync(args[2], args[3]);
+    }
+
+    private Task<int> BaselineGroupedAsync(string[] args)
+    {
+        if (args.Length < 5)
+        {
+            Console.Error.WriteLine("Usage: winledger session baseline <database> <session-id> <snapshot-name> [options]");
+            return Task.FromResult(2);
+        }
+
+        return CaptureAsync(args[2], args[3], args[4], TrackingSnapshotStage.Baseline, args.Skip(5).ToArray());
+    }
+
+    private Task<int> ComparisonGroupedAsync(string[] args)
+    {
+        if (args.Length < 5)
+        {
+            Console.Error.WriteLine("Usage: winledger session comparison <database> <session-id> <snapshot-name> [options]");
+            return Task.FromResult(2);
+        }
+
+        return CaptureAsync(args[2], args[3], args[4], TrackingSnapshotStage.Comparison, args.Skip(5).ToArray());
     }
 
     private async Task<int> CreateAsync(string databasePath, string title)
@@ -167,6 +223,62 @@ internal sealed class SessionCliCommands(IServiceProvider services)
         return 0;
     }
 
+    private async Task<int> CaptureAsync(
+        string databasePath,
+        string sessionIdValue,
+        string snapshotName,
+        TrackingSnapshotStage stage,
+        IReadOnlyList<string> options)
+    {
+        var parsedOptions = SessionCaptureOptionsParser.Parse(options);
+        var store = new SqliteWinLedgerStore(databasePath);
+        var orchestrator = CreateCaptureOrchestrator(store);
+        var sessionId = Guid.Parse(sessionIdValue);
+
+        using var cancellation = new CancellationTokenSource();
+        ConsoleCancelEventHandler handler = (_, eventArgs) =>
+        {
+            eventArgs.Cancel = true;
+            cancellation.Cancel();
+        };
+        Console.CancelKeyPress += handler;
+
+        try
+        {
+            var result = await orchestrator.CaptureAsync(
+                new TrackingSessionCaptureRequest(
+                    sessionId,
+                    snapshotName,
+                    stage,
+                    parsedOptions.Subsystems,
+                    parsedOptions.RegistryTargets,
+                    parsedOptions.FileSystemOptions),
+                ConsoleCaptureProgress.Instance,
+                cancellation.Token).ConfigureAwait(false);
+
+            Console.WriteLine($"SessionId: {result.Session.Id}");
+            Console.WriteLine($"Stage: {result.Stage}");
+            Console.WriteLine($"Status: {result.Session.Status}");
+            Console.WriteLine($"Snapshots: {result.Snapshots.Count}");
+            Console.WriteLine("Subsystem | SnapshotId | Items | Warnings");
+            foreach (var snapshot in result.Snapshots)
+            {
+                Console.WriteLine($"{snapshot.Subsystem} | {snapshot.SnapshotId} | {snapshot.ItemCount} | {snapshot.WarningCount}");
+            }
+
+            return 0;
+        }
+        catch (OperationCanceledException)
+        {
+            Console.Error.WriteLine("Operation canceled.");
+            return 4;
+        }
+        finally
+        {
+            Console.CancelKeyPress -= handler;
+        }
+    }
+
     private static string BuildTitle(string[] args, int startIndex)
     {
         return string.Join(' ', args.Skip(startIndex));
@@ -175,8 +287,48 @@ internal sealed class SessionCliCommands(IServiceProvider services)
     private static int UnknownSessionCommand(string command)
     {
         Console.Error.WriteLine($"Unknown session command: {command}");
-        Console.Error.WriteLine("Usage: winledger session <create|list|show> ...");
+        Console.Error.WriteLine("Usage: winledger session <create|list|show|baseline|comparison> ...");
         return 2;
+    }
+
+    private TrackingSessionCaptureOrchestrator CreateCaptureOrchestrator(SqliteWinLedgerStore store)
+    {
+        return new TrackingSessionCaptureOrchestrator(
+            store,
+            services.GetRequiredService<IRegistrySnapshotCollector>(),
+            store,
+            services.GetRequiredService<IServiceSnapshotCollector>(),
+            store,
+            services.GetRequiredService<IScheduledTaskSnapshotCollector>(),
+            store,
+            services.GetRequiredService<IStartupSnapshotCollector>(),
+            store,
+            services.GetRequiredService<IEnvironmentSnapshotCollector>(),
+            store,
+            services.GetRequiredService<IHostsFileSnapshotCollector>(),
+            store,
+            services.GetRequiredService<IFirewallSnapshotCollector>(),
+            store,
+            services.GetRequiredService<IInstalledApplicationSnapshotCollector>(),
+            store,
+            services.GetRequiredService<IFileSystemSnapshotCollector>(),
+            store);
+    }
+
+    private static void PrintCaptureProgress(TrackingSessionCaptureProgress progress)
+    {
+        Console.WriteLine(
+            $"{progress.CompletedSubsystems}/{progress.TotalSubsystems} {progress.Subsystem}: {progress.Message}");
+    }
+
+    private sealed class ConsoleCaptureProgress : IProgress<TrackingSessionCaptureProgress>
+    {
+        public static readonly ConsoleCaptureProgress Instance = new();
+
+        public void Report(TrackingSessionCaptureProgress value)
+        {
+            PrintCaptureProgress(value);
+        }
     }
 
     private static string ToSingleLine(string value)
@@ -197,4 +349,5 @@ internal sealed class SessionCliCommands(IServiceProvider services)
         var principal = new WindowsPrincipal(identity);
         return principal.IsInRole(WindowsBuiltInRole.Administrator);
     }
+
 }
