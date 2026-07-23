@@ -27,8 +27,12 @@ jobs:
       - name: Build
         run: dotnet build WinLedger.sln --configuration Release --no-restore
 
-      - name: Test
-        run: dotnet test WinLedger.sln --configuration Release --no-build
+      - name: Test with coverage
+        run: dotnet test WinLedger.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory artifacts/coverage
+
+      - name: Coverage gate
+        shell: pwsh
+        run: .\build\Check-Coverage.ps1 -CoveragePath artifacts\coverage -MinimumLineRate 0.50 -MinimumBranchRate 0.40
 
       - name: Format check
         run: dotnet format WinLedger.sln --verify-no-changes --no-restore
@@ -47,3 +51,9 @@ jobs:
           path: |
             artifacts/release/*.zip
             artifacts/release/*.json
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: winledger-coverage
+          path: artifacts/coverage/**/*.xml
