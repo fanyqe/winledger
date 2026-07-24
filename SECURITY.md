@@ -4,7 +4,7 @@ Please report sensitive security issues privately to the repository owner.
 
 WinLedger works with local system configuration data. Do not include secrets, registry exports, logs, or machine-specific reports in public issues unless they have been reviewed and redacted.
 
-Supported security expectations for the current alpha:
+Supported security expectations for the current release:
 
 - local-only storage;
 - no telemetry by default;

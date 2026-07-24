@@ -1,5 +1,9 @@
 # WinLedger
 
+<p align="center">
+  <img src="assets/winledger-social.png" alt="WinLedger - Windows system change tracking with conservative rollback" width="100%">
+</p>
+
 WinLedger records Windows system changes before and after you run an installer, script, tweak tool, driver package, or manual configuration change. It helps you answer a simple question: what changed on this machine, and which parts can be safely rolled back?
 
 Think of it as change tracking for Windows system modifications. It is built for people who want a clear before-and-after record instead of guessing what an installer or tweak changed.
