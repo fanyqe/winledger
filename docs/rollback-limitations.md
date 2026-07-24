@@ -69,7 +69,7 @@ Installed application rollback supports:
 - generating manual-review warnings for every detected registration or metadata change;
 - exporting the expected post-change registration and AppX/MSIX package metadata for review.
 
-Installed application rollback does not automatically uninstall applications, remove AppX/MSIX packages, recreate removed registrations, delete registry keys, or run uninstall commands in the current alpha. Those operations can affect shared files, services, drivers, licensing state, vendor maintenance data, deployment state, and package ownership outside the captured registration. A reviewer should use the report as evidence, then choose the vendor-supported uninstall, repair, or package deployment path when needed.
+Installed application rollback does not automatically uninstall applications, remove AppX/MSIX packages, recreate removed registrations, delete registry keys, or run uninstall commands in the current release. Those operations can affect shared files, services, drivers, licensing state, vendor maintenance data, deployment state, and package ownership outside the captured registration. A reviewer should use the report as evidence, then choose the vendor-supported uninstall, repair, or package deployment path when needed.
 
 File-system rollback supports:
 
@@ -79,4 +79,4 @@ File-system rollback supports:
 - restoring a modified file when the baseline snapshot contains backup bytes;
 - validating that the current file-system entry still matches the tracked post-change snapshot before writing or deleting.
 
-File-system rollback does not automatically restore files without backup data, delete non-empty directories, follow reparse points, or mutate paths outside the monitored root. Hash-backed renames are detected for reporting but require manual review in the current alpha. Large files are not backed up unless the configured size limit allows it. The current alpha uses selected-root scanning; NTFS USN Journal integration remains future work.
+File-system rollback does not automatically restore files without backup data, delete non-empty directories, follow reparse points, or mutate paths outside the monitored root. Hash-backed renames are detected for reporting but require manual review in the current release. Large files are not backed up unless the configured size limit allows it. File-system snapshots use selected-root scanning and include NTFS change journal state when Windows exposes it, so comparisons can warn when journal continuity cannot be trusted.

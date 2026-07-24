@@ -17,7 +17,7 @@ dotnet list WinLedger.sln package --vulnerable --include-transitive
 Create the default self-contained portable package:
 
 ```powershell
-.\build\Package-Portable.ps1 -Configuration Release -Runtime win-x64 -Version 0.1.0-alpha
+.\build\Package-Portable.ps1 -Configuration Release -Runtime win-x64 -Version 0.1.0
 ```
 
 The packaging script resolves the SDK pinned by `global.json`. If a developer machine has an older `dotnet` first on `PATH`, pass `-DotNetPath C:\Users\cekir\.dotnet\dotnet.exe`.
@@ -25,7 +25,7 @@ The packaging script resolves the SDK pinned by `global.json`. If a developer ma
 Create a smaller framework-dependent portable package only when the target machine already has the required .NET runtime installed:
 
 ```powershell
-.\build\Package-Portable.ps1 -Configuration Release -Runtime win-x64 -Version 0.1.0-alpha -FrameworkDependent
+.\build\Package-Portable.ps1 -Configuration Release -Runtime win-x64 -Version 0.1.0 -FrameworkDependent
 ```
 
 The script writes:

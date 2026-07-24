@@ -1,80 +1,42 @@
 # Roadmap
 
-## Phase 1: Foundation and Registry Slice
+## Current Release
 
-- Session creation
-- Registry snapshot collection
-- SQLite persistence
-- Registry comparison
-- JSON, HTML, plain-text, registry `.reg`, and registry PowerShell export
-- Conservative registry rollback plan
-- WPF shell
-- CLI preview with session create, list, and show commands
-- Unit tests
+WinLedger 0.1.0 is focused on local Windows change tracking with conservative rollback support.
 
-## Phase 3: Windows Configuration
-
-- Services snapshot, comparison, JSON export, WPF tab, CLI commands, and conservative rollback planning
-- Scheduled tasks snapshot, comparison, JSON export, WPF tab, CLI commands, and conservative rollback planning
-- Startup grouping, comparison, JSON export, WPF tab, CLI commands, and conservative Startup folder rollback planning
-- Environment variables snapshot, comparison, PATH entry reporting, JSON export, WPF tab, CLI commands, and conservative variable-level rollback planning
-- Hosts file snapshot, line comparison, exact-byte JSON export, WPF tab, CLI commands, and conservative full-file rollback planning
-
-## Phase 4: Firewall and Packages
-
-- Firewall rules snapshot, comparison, JSON export, WPF tab, CLI commands, and conservative rule deletion/enabled-state rollback planning
-- Installed applications and AppX/MSIX package registration snapshot, comparison, JSON/HTML export, WPF tab, CLI commands, and manual-review rollback planning for registration changes
-
-## Phase 5: File-System Tracking
-
-- Selected-root file-system snapshot, comparison, JSON export, WPF tab, CLI commands, and conservative rollback planning for created and backed-up file changes
-
-## Phase 6: UX and Release
-
-- Restricted elevated rollback helper process
-- Portable win-x64 release package script and GitHub Actions artifact workflow
-
-## Post-Alpha Priority Backlog
-
-### P0: Product Usability
-
-- Single unified tracking session across all supported subsystems.
+- Unified tracking sessions across the supported subsystems.
 - WPF session history with saved session reopening.
-- One baseline and comparison orchestration flow for every subsystem.
-- Progress reporting, cancellation, and non-blocking background execution.
-- WPF rollback execution through the elevated helper.
-- Helper executable signature or hash verification before privileged execution.
-- Rollback requests bound to the source report hash.
-- Restrictive ACLs and cleanup for helper request and response files.
-- Multi-root registry tracking and ready-made tracking profiles.
-- Real Windows integration tests for supported subsystem flows.
-- Atomic hosts file and backed-up file restore where the platform allows it.
+- Baseline and comparison orchestration for registry, services, scheduled tasks, startup entries, environment variables, hosts file, firewall rules, installed applications, and selected file-system roots.
+- Progress reporting, cancellation, and background execution for unified WPF capture.
+- SQLite persistence with a migration table and `PRAGMA foreign_keys = ON`.
+- DPAPI protection for stored snapshot payloads on Windows.
+- Hash-based file validation enabled by default.
+- Session retention and cleanup controls.
+- Multi-root registry tracking profiles.
+- `REG_NONE` registry value preservation.
+- NTFS change journal state capture and comparison continuity warnings where Windows exposes the journal.
+- WPF rollback execution through the elevated helper for supported rollback operations.
+- Helper executable hash verification, report-hash binding, restrictive ACLs, and cleanup for helper request files.
+- Atomic hosts file restore and atomic backed-up file restore.
+- Atomic unified capture commits for snapshot rows and session status.
+- JSON, HTML, plain-text, registry `.reg`, and registry PowerShell exports.
+- Portable Windows x64 package generation with manifest and SBOM.
+- CI build, test, format verification, coverage gate, CodeQL, dependency review, Dependabot, and issue templates.
+- Focused test coverage for comparison, storage, rollback, helper request validation, Windows registry integration, package scripts, and critical WPF binding regressions.
 
-### P1: Reliability And Release Hardening
+## Remaining Hardening
 
-- Real SQLite migration pipeline instead of create-only schema setup.
-- `PRAGMA foreign_keys = ON` for SQLite connections.
-- DPAPI or per-user protection for sensitive snapshot data.
-- Hash-based file validation by default for supported file rollback operations.
-- NTFS USN Journal-backed file tracking.
-- Local database retention and cleanup controls.
-- Signed release artifacts.
-- SBOM generation and CodeQL scanning.
-- Public issue workflow and triage labels.
-- Correct `REG_NONE` registry value handling.
+- Add broader real Windows integration tests for services, scheduled tasks, startup entries, hosts file, firewall, and file-system rollback flows.
+- Expand UI-level tests around the main WPF workflows.
+- Move more repeated subsystem capture, compare, export, and rollback flows into shared services.
+- Continue splitting the WPF main view model into focused view models and services.
+- Add issue triage labels and contribution templates.
+- Add optional signed release artifacts when a signing certificate is available.
+- Evaluate authenticated named pipes or another handle-based protocol for helper IPC.
+- Evaluate full USN delta enumeration for faster large-tree file tracking.
 
-### P2: Code Health
+## Later
 
-- Split the large WPF main view model into focused view models and services.
-- Move repeated subsystem capture, compare, export, and rollback flows into shared services.
-- Add a coverage gate for core comparison, storage, and rollback behavior.
-- Add UI-level tests for critical WPF flows.
-- Move helper communication to named pipes or another authenticated handle-based protocol.
-- Coordinate snapshot consistency and transactions across subsystem captures.
-
-## Later Phases
-
-- Windows package deployment API integration beyond registry-backed AppX/MSIX package registration tracking
-- NTFS USN Journal file tracking beyond the selected-root file-system scanner
-- Full desktop elevation prompts and helper status UI
-- Installer package beyond the portable zip
+- Windows package deployment API integration beyond registry-backed AppX/MSIX package registration tracking.
+- Installer package beyond the portable zip.
+- Additional report formats or integrations if real users ask for them.

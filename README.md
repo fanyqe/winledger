@@ -21,9 +21,9 @@ WinLedger is not a virtual machine, antivirus, registry cleaner, optimizer, sand
 
 Some changes can be reversed automatically after validation. Some require manual review. Some cannot be safely reversed by WinLedger, especially when they depend on vendor uninstallers, shared files, drivers, credentials, or external state.
 
-## Current Alpha Scope
+## Current Scope
 
-The current alpha includes working slices for:
+The current release includes working slices for:
 
 - Windows Registry values and selected keys
 - Windows Services
@@ -33,13 +33,13 @@ The current alpha includes working slices for:
 - Hosts file changes
 - Windows Firewall rules
 - Installed application and AppX/MSIX package registrations
-- Selected-root file-system tracking
+- Selected-root file-system tracking with NTFS change journal state tracking where Windows exposes it
 - JSON, HTML, plain-text, `.reg`, and registry `.ps1` exports
 - Conservative rollback planning and execution for supported operations
 - Restricted elevated rollback helper
 - Portable win-x64 package output
 
-File-system tracking currently uses selected-root scanning with exclusions. NTFS USN Journal support is planned for a later phase.
+File-system tracking uses selected-root scanning with exclusions. On supported NTFS volumes, snapshots also store change journal state so reports can warn when journal continuity cannot be trusted between captures.
 
 ## Requirements
 
@@ -67,7 +67,7 @@ C:\Users\cekir\.dotnet\dotnet.exe build WinLedger.sln
 ## Portable Package
 
 ```powershell
-.\build\Package-Portable.ps1 -Configuration Release -Runtime win-x64 -Version 0.1.0-alpha
+.\build\Package-Portable.ps1 -Configuration Release -Runtime win-x64 -Version 0.1.0
 ```
 
 The package is written to `artifacts\release` and contains:
@@ -144,7 +144,7 @@ WinLedger validates the expected current state before applying supported rollbac
 
 File-system capture calculates SHA-256 hashes by default so rollback validation can detect content changes even when file metadata is not enough. Use `--no-hash` only when a faster scan is more important than content-level validation.
 
-Rollback support is intentionally limited in the alpha:
+Rollback support is intentionally conservative:
 
 - Registry rollback covers value-level operations.
 - Service rollback covers start mode and delayed automatic start.
