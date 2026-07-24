@@ -14,6 +14,7 @@ Initial controls:
 - firewall rollback validates expected current rule state before writing and avoids duplicate rule names;
 - installed application rollback emits manual-review warnings instead of executable uninstall operations;
 - file-system rollback validates expected current metadata before mutation, refuses paths outside the monitored root, and refuses reparse points;
+- the elevated rollback helper accepts structured request files, authenticates requests, verifies report and helper hashes, and writes privileged execution audit entries;
 - no telemetry, cloud account, advertisements, hidden network calls, or remote analysis services are added.
 
 Hosts file snapshots can reveal internal hostnames, IP mappings, local development domains, blocked domains, comments, and exact file bytes retained for rollback. Users should review and redact exported reports before sharing them.
@@ -24,9 +25,7 @@ Installed application snapshots can reveal installed software inventory, AppX/MS
 
 File-system snapshots can reveal local paths, file names, timestamps, hashes, and backed-up file bytes. Users should review and redact exported reports before sharing them.
 
-Future work:
+Additional hardening opportunities:
 
 - export redaction options;
 - restrictive permissions for rollback backup data;
-- elevated helper process with a structured operation contract;
-- audit log for privileged rollback execution.

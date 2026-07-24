@@ -31,7 +31,8 @@ Create a smaller framework-dependent portable package only when the target machi
 The script writes:
 
 - `artifacts\release\WinLedger-<version>-win-x64-portable.zip`;
-- `artifacts\release\WinLedger-<version>-win-x64-portable.json`.
+- `artifacts\release\WinLedger-<version>-win-x64-portable.json`;
+- `artifacts\release\WinLedger-<version>-win-x64-portable.sbom.json`.
 
 The zip contains:
 
