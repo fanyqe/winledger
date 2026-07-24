@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- No unreleased product changes.
+
+## 0.1.0 - 2026-07-24
+
 - Started the .NET 10 LTS WinLedger solution.
 - Added the first registry snapshot, diff, JSON/HTML export, and rollback planning slice.
 - Added Windows Services snapshot, comparison, JSON/HTML export, WPF tab, CLI commands, and conservative rollback planning.
@@ -17,3 +21,7 @@
 - Added selected-root File-System snapshot, comparison, JSON/HTML export, WPF tab, CLI commands, and conservative rollback planning for created and backed-up file changes.
 - Added a portable Windows release package script and GitHub Actions artifact workflow.
 - Added a restricted elevated rollback helper executable with authenticated request files and CLI launch support.
+- Enabled hash-based file validation by default for file-system captures.
+- Added session retention cleanup controls and a CLI cleanup command.
+- Added CI build, test, format verification, coverage gate, CodeQL, dependency review, Dependabot, issue templates, and a pull request template.
+- Added release metadata, branding assets, portable package manifest generation, and SBOM generation.

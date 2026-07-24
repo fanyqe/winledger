@@ -21,7 +21,7 @@ WinLedger 0.1.0 is focused on local Windows change tracking with conservative ro
 - Atomic unified capture commits for snapshot rows and session status.
 - JSON, HTML, plain-text, registry `.reg`, and registry PowerShell exports.
 - Portable Windows x64 package generation with manifest and SBOM.
-- CI build, test, format verification, coverage gate, CodeQL, dependency review, Dependabot, and issue templates.
+- CI build, test, format verification, coverage gate, CodeQL, dependency review, Dependabot, issue templates, pull request template, and issue triage labels.
 - Focused test coverage for comparison, storage, rollback, helper request validation, Windows registry integration, package scripts, and critical WPF binding regressions.
 
 ## Remaining Hardening
@@ -30,7 +30,6 @@ WinLedger 0.1.0 is focused on local Windows change tracking with conservative ro
 - Expand UI-level tests around the main WPF workflows.
 - Move more repeated subsystem capture, compare, export, and rollback flows into shared services.
 - Continue splitting the WPF main view model into focused view models and services.
-- Add issue triage labels and contribution templates.
 - Add optional signed release artifacts when a signing certificate is available.
 - Evaluate authenticated named pipes or another handle-based protocol for helper IPC.
 - Evaluate full USN delta enumeration for faster large-tree file tracking.
