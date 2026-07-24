@@ -69,7 +69,7 @@
                 <Button Grid.Row="1" Grid.Column="5" Command="{Binding CancelUnifiedCaptureCommand}" Content="Cancel" Height="34" Padding="14,0" Margin="0,6,0,0" />
 
                 <DockPanel Grid.Row="2" Grid.ColumnSpan="6" Margin="0,12,0,0">
-                    <ProgressBar DockPanel.Dock="Right" Width="220" Height="12" Minimum="0" Maximum="100" Value="{Binding UnifiedCaptureProgressPercent}" Margin="12,3,0,0" />
+                    <ProgressBar DockPanel.Dock="Right" Width="220" Height="12" Minimum="0" Maximum="100" Value="{Binding UnifiedCaptureProgressPercent, Mode=OneWay}" Margin="12,3,0,0" />
                     <WrapPanel DockPanel.Dock="Left" VerticalAlignment="Center">
                         <CheckBox Content="Registry" IsChecked="{Binding UnifiedIncludeRegistry}" Margin="0,0,12,0" />
                         <CheckBox Content="Services" IsChecked="{Binding UnifiedIncludeServices}" Margin="0,0,12,0" />
