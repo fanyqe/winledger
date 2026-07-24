@@ -115,7 +115,7 @@ Installed application snapshots store:
 - optional AppX/MSIX package full name, family name, package name, publisher identity, resource identity, manifest path, and inbox package marker;
 - collection warnings.
 
-Installed application rollback operations are not emitted in the current alpha. Reports include manual-review warnings because application and package removal can depend on vendor uninstallers, package ownership, shared files, services, drivers, deployment state, and current machine state. Reports can expose installed software inventory, AppX/MSIX package inventory, local paths, publisher names, product codes, package identities, manifest paths, and uninstall commands, so they should be reviewed before sharing.
+Installed application rollback operations are not emitted in the current release. Reports include manual-review warnings because application and package removal can depend on vendor uninstallers, package ownership, shared files, services, drivers, deployment state, and current machine state. Reports can expose installed software inventory, AppX/MSIX package inventory, local paths, publisher names, product codes, package identities, manifest paths, and uninstall commands, so they should be reviewed before sharing.
 
 File-system snapshots store:
 

@@ -42,7 +42,7 @@ jobs:
 
       - name: Package portable release
         shell: pwsh
-        run: .\build\Package-Portable.ps1 -Configuration Release -Runtime win-x64 -Version "0.1.0-alpha-${{ github.run_number }}"
+        run: .\build\Package-Portable.ps1 -Configuration Release -Runtime win-x64 -Version "0.1.0-ci-${{ github.run_number }}"
 
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4

@@ -1,7 +1,7 @@
 param(
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
-    [string]$Version = "0.1.0-alpha",
+    [string]$Version = "0.1.0",
     [string]$OutputRoot = "artifacts\release",
     [string]$DotNetPath = "dotnet",
     [switch]$FrameworkDependent,
