@@ -1,166 +1,175 @@
 # WinLedger
 
 <p align="center">
-  <img src="assets/winledger-social.png" alt="WinLedger - Windows system change tracking with conservative rollback" width="100%">
+  <img src="assets/winledger-wordmark.png" alt="WinLedger" width="460">
 </p>
 
-WinLedger records Windows system changes before and after you run an installer, script, tweak tool, driver package, or manual configuration change. It helps you answer a simple question: what changed on this machine, and which parts can be safely rolled back?
+<p align="center">
+  <strong>Git-like change tracking for Windows system modifications.</strong>
+</p>
 
-Think of it as change tracking for Windows system modifications. It is built for people who want a clear before-and-after record instead of guessing what an installer or tweak changed.
+<p align="center">
+  <a href="https://github.com/fanyqe/winledger/releases">Download portable build</a>
+  |
+  <a href="#quick-start">Quick start</a>
+  |
+  <a href="docs/rollback-limitations.md">Rollback limits</a>
+</p>
 
-## What WinLedger Does
+<p align="center">
+  <img src="docs/assets/screenshots/winledger-comparison.png" alt="WinLedger file-system comparison screen" width="100%">
+</p>
 
-- Creates local tracking sessions.
-- Captures before-and-after snapshots of selected Windows areas.
-- Compares snapshots and groups changes by subsystem.
-- Explains technical changes in readable terms.
-- Exports reports as JSON, HTML, plain text, registry `.reg` files, and registry PowerShell rollback scripts.
-- Builds conservative rollback plans where the current machine state can be validated first.
-- Stores data locally in SQLite.
-- Provides both a WPF desktop app and a CLI preview.
+WinLedger records Windows system changes before and after you run an installer, script, tweak tool, driver package, or manual configuration change. It helps you answer what changed on the machine, which areas were affected, and which supported operations can be reviewed for conservative rollback. WinLedger stores its data locally and is built for auditable before-and-after evidence, not hidden cleanup or cloud analysis.
 
-## What It Is Not
+## Demo
 
-WinLedger is not a virtual machine, antivirus, registry cleaner, optimizer, sandbox, or perfect System Restore replacement. Rollback is best-effort, subsystem-dependent, and intentionally conservative.
+<p align="center">
+  <img src="docs/assets/screenshots/winledger-demo.gif" alt="Short WinLedger desktop app demo" width="100%">
+</p>
 
-Some changes can be reversed automatically after validation. Some require manual review. Some cannot be safely reversed by WinLedger, especially when they depend on vendor uninstallers, shared files, drivers, credentials, or external state.
+## Features
+
+- Local tracking sessions stored in SQLite.
+- Before-and-after snapshots for selected Windows subsystems.
+- Comparison views grouped by subsystem with readable summaries.
+- WPF desktop app plus a CLI preview for scripted flows.
+- JSON, HTML, and plain-text reports.
+- Registry `.reg` export and registry PowerShell rollback script export.
+- Conservative rollback planning with validation before mutation.
+- Restricted elevated rollback helper for supported administrator operations.
+- Portable `win-x64` package output.
+- No telemetry, cloud account, advertisements, or hidden network analysis.
 
 ## Current Scope
 
-The current release includes working slices for:
+WinLedger currently tracks these areas:
 
-- Windows Registry values and selected keys
-- Windows Services
-- Scheduled Tasks
-- Startup entries
-- User and machine environment variables
-- Hosts file changes
-- Windows Firewall rules
-- Installed application and AppX/MSIX package registrations
-- Selected-root file-system tracking with NTFS change journal state tracking where Windows exposes it
-- JSON, HTML, plain-text, `.reg`, and registry `.ps1` exports
-- Conservative rollback planning and execution for supported operations
-- Restricted elevated rollback helper
-- Portable win-x64 package output
+- Windows Registry values and selected keys.
+- Windows Services.
+- Scheduled Tasks.
+- Startup entries.
+- User and machine environment variables.
+- Hosts file changes.
+- Windows Firewall rules.
+- Installed application registrations and AppX/MSIX package metadata.
+- Selected-root file-system changes, with NTFS change journal state when Windows exposes it.
 
-File-system tracking uses selected-root scanning with exclusions. On supported NTFS volumes, snapshots also store change journal state so reports can warn when journal continuity cannot be trusted between captures.
+## Screenshots
 
-## Requirements
+All screenshots below were captured from the same WinLedger WPF window using a real local file-system tracking session.
 
-- Windows 11 or another supported Windows desktop release
-- .NET 10 LTS SDK
+| Main window | Session history |
+| --- | --- |
+| <img src="docs/assets/screenshots/winledger-main.png" alt="WinLedger main window"> | <img src="docs/assets/screenshots/winledger-history.png" alt="WinLedger session history"> |
 
-This repository pins SDK `10.0.302` through `global.json`.
+| Comparison | Change details |
+| --- | --- |
+| <img src="docs/assets/screenshots/winledger-comparison.png" alt="WinLedger comparison view"> | <img src="docs/assets/screenshots/winledger-change-details.png" alt="WinLedger change details in the comparison table"> |
 
-## Build And Test
+| Rollback plan |
+| --- |
+| <img src="docs/assets/screenshots/winledger-rollback.png" alt="WinLedger rollback plan"> |
+
+## Supported Platform
+
+| Area | Support |
+| --- | --- |
+| Operating system | Windows desktop releases supported by the .NET 10 Windows Desktop Runtime. Development and screenshots were verified on Windows 11 x64. |
+| Portable package | `win-x64` by default. |
+| App framework | WPF targeting `net10.0-windows`. |
+| Development SDK | .NET 10 SDK `10.0.302`, pinned in `global.json`. |
+| Runtime | The default portable package is self-contained. Framework-dependent builds require the matching .NET 10 Windows Desktop Runtime. |
+
+## Quick Start
+
+### Download
+
+1. Open the [WinLedger Releases page](https://github.com/fanyqe/winledger/releases).
+2. Download the portable `WinLedger-<version>-win-x64-portable.zip` package when a release asset is available.
+3. Extract the zip.
+4. Start the desktop app from `app\WinLedger.App.exe`.
+
+### Build From Source
+
+Use the SDK pinned by `global.json`. On this machine, the pinned SDK is installed under the current user profile:
 
 ```powershell
-dotnet restore
-dotnet build WinLedger.sln
-dotnet test WinLedger.sln
-dotnet format WinLedger.sln --verify-no-changes --no-restore
-dotnet list WinLedger.sln package --vulnerable --include-transitive
+& "$env:USERPROFILE\.dotnet\dotnet.exe" restore WinLedger.sln
+& "$env:USERPROFILE\.dotnet\dotnet.exe" build WinLedger.sln --configuration Release --no-restore
+& "$env:USERPROFILE\.dotnet\dotnet.exe" test WinLedger.sln --configuration Release --no-build
 ```
 
-If the system `dotnet` command resolves to an older SDK, use the pinned SDK path explicitly:
+Run the WPF app:
 
 ```powershell
-C:\Users\cekir\.dotnet\dotnet.exe build WinLedger.sln
+& "$env:USERPROFILE\.dotnet\dotnet.exe" run --project src\WinLedger.App\WinLedger.App.csproj
 ```
 
-## Portable Package
+Create a portable package:
 
 ```powershell
 .\build\Package-Portable.ps1 -Configuration Release -Runtime win-x64 -Version 0.1.0
 ```
 
-The package is written to `artifacts\release` and contains:
+The package is written to `artifacts\release` and includes the desktop app, CLI preview, elevated helper, license, security notes, README, and docs.
 
-- `app\WinLedger.App.exe`
-- `cli\WinLedger.Cli.exe`
-- `helper\WinLedger.ElevatedHelper.exe`
-- license, security notes, README, and docs
+## Basic Use
 
-The default package is self-contained. Use `-FrameworkDependent` only when the target machine already has the required .NET runtime installed.
-
-The packaging script uses the SDK pinned by `global.json`. On developer machines with multiple SDKs, pass `-DotNetPath C:\Users\cekir\.dotnet\dotnet.exe` if automatic SDK resolution cannot find the pinned SDK.
-
-See [docs/release-process.md](docs/release-process.md) for the release checklist.
+1. Enter a tracking session name.
+2. Choose the subsystems to include.
+3. For file-system tracking, choose the monitored root path and backup limit.
+4. Click `Capture Baseline`.
+5. Run the installer, script, tweak, or manual change you want to inspect.
+6. Click `Finish and Compare`.
+7. Review detected changes, export a report, or generate a rollback plan for supported operations.
+8. Reopen saved sessions from `Session history`.
 
 ## CLI Preview
 
 Show available commands:
 
 ```powershell
-dotnet run --project src\WinLedger.Cli -- --help
+& "$env:USERPROFILE\.dotnet\dotnet.exe" run --project src\WinLedger.Cli -- --help
 ```
 
-Create, list, and reopen local sessions:
+Minimal session flow:
 
 ```powershell
-dotnet run --project src\WinLedger.Cli -- session create .\winledger.db "Installing ExampleApp"
-dotnet run --project src\WinLedger.Cli -- session list .\winledger.db
-dotnet run --project src\WinLedger.Cli -- session show .\winledger.db <session-id>
+& "$env:USERPROFILE\.dotnet\dotnet.exe" run --project src\WinLedger.Cli -- session create .\winledger.db "Installing ExampleApp"
+& "$env:USERPROFILE\.dotnet\dotnet.exe" run --project src\WinLedger.Cli -- session list .\winledger.db
+& "$env:USERPROFILE\.dotnet\dotnet.exe" run --project src\WinLedger.Cli -- session show .\winledger.db <session-id>
 ```
 
-Clean up old sessions after checking the impact:
+Minimal file-system flow:
 
 ```powershell
-dotnet run --project src\WinLedger.Cli -- session cleanup .\winledger.db --older-than-days 30 --keep-newest 10 --dry-run
-dotnet run --project src\WinLedger.Cli -- session cleanup .\winledger.db --older-than-days 30 --keep-newest 10
+& "$env:USERPROFILE\.dotnet\dotnet.exe" run --project src\WinLedger.Cli -- files-capture .\winledger.db <session-id> Baseline .\Sandbox --backup-small-files 262144
+& "$env:USERPROFILE\.dotnet\dotnet.exe" run --project src\WinLedger.Cli -- files-capture .\winledger.db <session-id> Comparison .\Sandbox --backup-small-files 262144
+& "$env:USERPROFILE\.dotnet\dotnet.exe" run --project src\WinLedger.Cli -- files-compare .\winledger.db <baseline-snapshot-id> <comparison-snapshot-id> .\file-system-report.json
 ```
 
-The single-token aliases `session-create`, `session-list`, `session-show`, and `session-cleanup` are also available for scripts.
+Other subsystem commands follow the same capture/compare pattern.
 
-Minimal registry flow:
+## Rollback Limits
 
-```powershell
-dotnet run --project src\WinLedger.Cli -- session create .\winledger.db "Installing ExampleApp"
-dotnet run --project src\WinLedger.Cli -- registry-capture .\winledger.db <session-id> Baseline HKCU\Software\WinLedger\TestSandbox
-dotnet run --project src\WinLedger.Cli -- registry-capture .\winledger.db <session-id> Comparison HKCU\Software\WinLedger\TestSandbox
-dotnet run --project src\WinLedger.Cli -- registry-compare .\winledger.db <baseline-snapshot-id> <comparison-snapshot-id> .\registry-report.json
-dotnet run --project src\WinLedger.Cli -- registry-compare .\winledger.db <baseline-snapshot-id> <comparison-snapshot-id> .\registry-report.html
-dotnet run --project src\WinLedger.Cli -- registry-compare .\winledger.db <baseline-snapshot-id> <comparison-snapshot-id> .\registry-report.txt
-dotnet run --project src\WinLedger.Cli -- registry-compare .\winledger.db <baseline-snapshot-id> <comparison-snapshot-id> .\registry-rollback.reg
-dotnet run --project src\WinLedger.Cli -- registry-compare .\winledger.db <baseline-snapshot-id> <comparison-snapshot-id> .\registry-rollback.ps1
-dotnet run --project src\WinLedger.Cli -- registry-rollback-apply .\registry-report.json <operation-id>
-```
+WinLedger is not a virtual machine, antivirus, registry cleaner, optimizer, sandbox, or perfect System Restore replacement. Rollback is best-effort, subsystem-dependent, and intentionally conservative.
 
-Other subsystem commands follow the same pattern:
+Supported rollback operations validate the expected current state before writing. If the machine changed again after the comparison snapshot, rollback can stop or report a conflict instead of blindly mutating the system.
 
-```powershell
-dotnet run --project src\WinLedger.Cli -- service-capture .\winledger.db <session-id> Baseline
-dotnet run --project src\WinLedger.Cli -- service-compare .\winledger.db <baseline-snapshot-id> <comparison-snapshot-id> .\services-report.json
-dotnet run --project src\WinLedger.Cli -- task-capture .\winledger.db <session-id> Baseline
-dotnet run --project src\WinLedger.Cli -- startup-capture .\winledger.db <session-id> Baseline
-dotnet run --project src\WinLedger.Cli -- environment-capture .\winledger.db <session-id> Baseline
-dotnet run --project src\WinLedger.Cli -- hosts-capture .\winledger.db <session-id> Baseline
-dotnet run --project src\WinLedger.Cli -- firewall-capture .\winledger.db <session-id> Baseline
-dotnet run --project src\WinLedger.Cli -- applications-capture .\winledger.db <session-id> Baseline
-dotnet run --project src\WinLedger.Cli -- files-capture .\winledger.db <session-id> Baseline .\Sandbox --backup-small-files 262144
-```
+Current rollback boundaries:
 
-Use `--no-elevation` only for local smoke tests against non-privileged sandbox paths.
+- Registry rollback covers value-level operations; whole-key rollback is manual review.
+- Service rollback covers start mode and delayed automatic start; it does not create, delete, start, stop, or reconfigure service executables, accounts, or dependencies.
+- Scheduled task rollback covers newly created tasks and enabled-state changes; it does not reconstruct full task definitions.
+- Startup rollback covers newly created Startup folder entries; registry Run keys, services, and scheduled tasks stay tied to their native subsystem rollback paths.
+- Environment rollback restores tracked variable values after validation; PATH changes restore the full previous variable value.
+- Hosts file rollback restores the full tracked file bytes after validation.
+- Firewall rollback covers newly created rules and enabled-state changes; rule recreation and deep rule edits are manual review.
+- Installed application rollback is manual-review only; WinLedger does not run uninstallers or remove AppX/MSIX packages in the current release.
+- File-system rollback covers newly created entries and backed-up deleted or modified files inside the monitored root; large files without backup data, non-empty directories, reparse points, and hash-backed renames require review.
 
-## Safety Notes
-
-WinLedger validates the expected current state before applying supported rollback operations. If the machine has changed again since the comparison snapshot, rollback can stop or mark the operation as conflicted instead of blindly mutating the system.
-
-File-system capture calculates SHA-256 hashes by default so rollback validation can detect content changes even when file metadata is not enough. Use `--no-hash` only when a faster scan is more important than content-level validation.
-
-Rollback support is intentionally conservative:
-
-- Registry rollback covers value-level operations.
-- Service rollback covers start mode and delayed automatic start.
-- Scheduled task rollback covers newly created tasks and enabled-state changes.
-- Startup rollback covers newly created Startup folder entries.
-- Environment rollback restores tracked variable values after validation.
-- Hosts file rollback restores tracked file bytes after validation.
-- Firewall rollback covers newly created rules and enabled-state changes.
-- Installed application rollback is manual-review only.
-- File-system rollback covers newly created entries and backed-up deleted or modified files.
-
-WinLedger stores data locally and does not add telemetry, cloud accounts, advertisements, hidden network calls, or remote analysis services.
+See [docs/rollback-limitations.md](docs/rollback-limitations.md) for subsystem-level details.
 
 ## Documentation
 
@@ -172,6 +181,10 @@ WinLedger stores data locally and does not add telemetry, cloud accounts, advert
 - [Security policy](SECURITY.md)
 - [Roadmap](ROADMAP.md)
 
+## Contributing
+
+WinLedger favors deterministic, auditable behavior over heuristics. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+
 ## License
 
-WinLedger is released under the MIT License.
+WinLedger is released under the [MIT License](LICENSE).
