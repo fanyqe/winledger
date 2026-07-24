@@ -123,6 +123,7 @@ if ($LASTEXITCODE -ne 0) {
 Copy-Item -LiteralPath (Join-Path $repoRoot "LICENSE") -Destination (Join-Path $stageRoot "LICENSE.txt")
 Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination (Join-Path $stageRoot "README.md")
 Copy-Item -LiteralPath (Join-Path $repoRoot "SECURITY.md") -Destination (Join-Path $stageRoot "SECURITY.md")
+Copy-Item -LiteralPath (Join-Path $repoRoot "assets") -Destination (Join-Path $stageRoot "assets") -Recurse
 Copy-Item -LiteralPath (Join-Path $repoRoot "docs") -Destination (Join-Path $stageRoot "docs") -Recurse
 
 $readmeText = @"
